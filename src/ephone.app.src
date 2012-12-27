@@ -1,0 +1,16 @@
+%% -*- mode: Erlang; fill-column: 75; comment-column: 50; -*-
+{application, ephone,
+ [{description, "Phone number parser and validator"},
+  {vsn, "0.1.0"},
+  {modules, []},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  trie,
+                  kvc,
+                  jsx
+                 ]},
+  {mod, {ephone_app, []}},
+  {env, []}]
+}.
