@@ -2,9 +2,7 @@
   {
     "country_name": "USA",
     "country_code": "1",
-    "iso_code": "us",
-    "domestic_dialing_prefix": "1",
-    "international_dialing_prefix": "011"
+    "iso_code": "us"
   },
   {
     "country_name": "Canada",
@@ -18,9 +16,7 @@
                      "1418", "1438", "1450", "1514", "1579", "1581", "1819", "1873",
                      "1306", "1639",
                      "1867"],
-    "iso_code": "ca",
-    "domestic_dialing_prefix": "1",
-    "international_dialing_prefix": "011"
+    "iso_code": "ca"
   },
   {
     "country_name": "Bahamas",
@@ -570,9 +566,7 @@
   {
     "country_name": "Vatican City",
     "country_code": ["379", "3906698"],
-    "iso_code": "va",
-    "domestic_dialing_prefix": "0",
-    "international_dialing_prefix": "00"
+    "iso_code": "va"
   },
   {
     "country_name": "Ukraine",
@@ -612,9 +606,7 @@
   {
     "country_name": "Italy",
     "country_code": "39",
-    "iso_code": "it",
-    "domestic_dialing_prefix": "0",
-    "international_dialing_prefix": "00"
+    "iso_code": "it"
   },
   {
     "country_name": "Romania",
@@ -779,9 +771,7 @@
   {
     "country_name": "Argentina",
     "country_code": "54",
-    "iso_code": "ar",
-    "domestic_dialing_prefix": "0",
-    "international_dialing_prefix": "00"
+    "iso_code": "ar"
   },
   {
     "country_name": "Brazil",
