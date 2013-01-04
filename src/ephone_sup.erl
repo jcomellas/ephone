@@ -41,5 +41,6 @@ init([]) ->
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
     {ok, {SupFlags, [
+                     ?SUPERVISOR(ephone_dial_rules_sup, ephone_dial_rules_sup, []),
                      ?WORKER(ephone, ephone, [])
                     ]}}.
