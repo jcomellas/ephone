@@ -14,7 +14,7 @@
 
 %% API
 -export([start_link/0]).
--export([start_dial_rules/1, stop_dial_rules/1]).
+-export([start_dial_rules/2, stop_dial_rules/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -37,9 +37,9 @@ start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 
--spec start_dial_rules(ephone:iso_code()) -> start_dial_rules_ret().
-start_dial_rules(IsoCode) ->
-    supervisor:start_child(?SERVER, [IsoCode]).
+-spec start_dial_rules(ephone:iso_code(), ephone:country_code()) -> start_dial_rules_ret().
+start_dial_rules(IsoCode, CountryCodes) ->
+    supervisor:start_child(?SERVER, [IsoCode, CountryCodes]).
 
 
 -spec stop_dial_rules(ephone:iso_code() | pid()) -> ok | {error, Reason :: term()}.

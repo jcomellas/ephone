@@ -13,9 +13,9 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 -export([registered_name/1]).
--export([iso_code/1, international_access_code/1, trunk_code/1]).
+-export([iso_code/1, international_prefix/1, trunk_prefix/1]).
 -export([parse_destination/3]).
 -export([reload/1]).
 
@@ -27,8 +27,8 @@
 -define(REGISTERED_NAME_PREFIX, "ephone.").
 -define(DIAL_RULES_PREFIX, "dial_rules_").
 -define(JSON_EXTENSION, ".json").
--define(TRUNK_CODE, "trunk_code").
--define(INTERNATIONAL_ACCESS_CODE, "international_access_code").
+-define(TRUNK_PREFIX, "trunk_prefix").
+-define(INTERNATIONAL_PREFIX, "international_prefix").
 -define(DIAL_RULES, "dial_rules").
 -define(BILLING_TAGS, "billing_tags").
 -define(REGEXP, "regexp").
@@ -36,7 +36,7 @@
 
 -type server_ref()                                                  :: atom() | {atom(), node()} |
                                                                        pid() | ephone:iso_code().
--type match_action()                                                :: return | reparse_without_international_access_code.
+-type match_action()                                                :: return | reparse_without_international_prefix.
 
 -record(dial_rule, {
           billing_tags                                              :: ephone:billing_tag() | [ephone:billing_tag()],
@@ -47,10 +47,10 @@
 
 -record(state, {
           iso_code = erlang:error({required, iso_code})             :: ephone:iso_code(),
-          country_code = erlang:error({required, country_code})     :: ephone:country_code(),
+          country_codes = erlang:error({required, country_code})    :: [ephone:country_code()],
           default_area_code                                         :: ephone:area_code(),
-          trunk_code                                                :: ephone:dialing_prefix(),
-          international_access_code                                 :: ephone:dialing_prefix(),
+          trunk_prefix                                              :: ephone:dialing_prefix(),
+          international_prefix                                      :: ephone:dialing_prefix(),
           dial_rules = []                                           :: [#dial_rule{}]
          }).
 
@@ -60,9 +60,9 @@
 %%%===================================================================
 
 %% @doc Starts the dialing rules for a country.
--spec start_link(ephone:iso_code()) -> {ok, pid()} | ignore | {error, Reason :: term()}.
-start_link(IsoCode) ->
-    gen_server:start_link({local, registered_name(IsoCode)}, ?MODULE, [IsoCode], []).
+-spec start_link(ephone:iso_code(), [ephone:country_code()]) -> {ok, pid()} | ignore | {error, Reason :: term()}.
+start_link(IsoCode, CountryCodes) ->
+    gen_server:start_link({local, registered_name(IsoCode)}, ?MODULE, [IsoCode, CountryCodes], []).
 
 %% @doc Return the name used to register a dialing rule.
 -spec registered_name(ephone:iso_code()) -> atom().
@@ -73,13 +73,13 @@ registered_name(IsoCode) when is_binary(IsoCode) ->
 iso_code(ServerRef) ->
     call(ServerRef, iso_code).
 
--spec trunk_code(server_ref()) -> ephone:dialing_prefix().
-trunk_code(ServerRef) ->
-    call(ServerRef, trunk_code).
+-spec trunk_prefix(server_ref()) -> ephone:dialing_prefix().
+trunk_prefix(ServerRef) ->
+    call(ServerRef, trunk_prefix).
 
--spec international_access_code(server_ref()) -> ephone:dialing_prefix().
-international_access_code(ServerRef) ->
-    call(ServerRef, international_access_code).
+-spec international_prefix(server_ref()) -> ephone:dialing_prefix().
+international_prefix(ServerRef) ->
+    call(ServerRef, international_prefix).
 
 -spec parse_destination(server_ref(), Destination :: ephone:phone_number(), [ephone:parse_option()]) ->
                                {ok, proplists:proplist()} | {error, Reason :: term()}.
@@ -104,13 +104,13 @@ call(ServerRef, Request) ->
 %% @private
 %% @doc Initializes the dial rules.
 -spec init(Args :: list()) -> {ok, #state{}}.
-init([IsoCode, CountryCode]) ->
-    {ok, {DomesticDialingPrefix, InternationalAccessCode, DialRules}} = load_country_rules(IsoCode),
+init([IsoCode, CountryCodes]) ->
+    {ok, {TrunkPrefix, InternationalPrefix, DialRules}} = load_country_rules(IsoCode),
     {ok, #state{
             iso_code = IsoCode,
-            country_code = CountryCode,
-            trunk_code = DomesticDialingPrefix,
-            international_access_code = InternationalAccessCode,
+            country_codes = CountryCodes,
+            trunk_prefix = TrunkPrefix,
+            international_prefix = InternationalPrefix,
             dial_rules = DialRules
            }}.
 
@@ -126,12 +126,12 @@ init([IsoCode, CountryCode]) ->
 %% iso_code/1 callback
 handle_call(iso_code, _From, State) ->
     {reply, State#state.iso_code, State};
-%% trunk_code/1 callback
-handle_call(trunk_code, _From, State) ->
-    {reply, State#state.trunk_code, State};
-%% international_access_code/1 callback
-handle_call(international_access_code, _From, State) ->
-    {reply, State#state.international_access_code, State};
+%% trunk_prefix/1 callback
+handle_call(trunk_prefix, _From, State) ->
+    {reply, State#state.trunk_prefix, State};
+%% international_prefix/1 callback
+handle_call(international_prefix, _From, State) ->
+    {reply, State#state.international_prefix, State};
 %% parse_destination/2 callback
 handle_call({parse_destination, Destination, Options}, _From, State) ->
     {reply, parse_destination_internal(Destination, Options, State), State};
@@ -140,8 +140,8 @@ handle_call(reload, _From, State) ->
     case load_country_rules(State#state.iso_code) of
         {ok, {DomesticDialingPrefix, InternationalAccessCode, DialRules}} ->
             NewState = State#state{
-                         trunk_code = DomesticDialingPrefix,
-                         international_access_code = InternationalAccessCode,
+                         trunk_prefix = DomesticDialingPrefix,
+                         international_prefix = InternationalAccessCode,
                          dial_rules = DialRules
                         },
             {reply, ok, NewState};
@@ -194,17 +194,20 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec load_country_rules(ephone:iso_code()) -> {ok, [#dial_rule{}]} | {error, Reason :: term()}.
 load_country_rules(IsoCode) ->
-    Filename = filename:join([code:priv_dir(?APP),
+    Filename = filename:join([dial_rules_dir(),
                               ?DIAL_RULES_PREFIX ++ binary_to_list(IsoCode) ++ ?JSON_EXTENSION]),
     case file:read_file(Filename) of
         {ok, JsonText} ->
             JsonTerm = jsx:decode(JsonText),
-            case {kvc:path(<<?TRUNK_CODE>>, JsonTerm),
-                  kvc:path(<<?INTERNATIONAL_ACCESS_CODE>>, JsonTerm),
-                  decode_country_rules(kvc:path(<<?DIAL_RULES>>, JsonTerm))} of
-                {DomesticDialingPrefix, InternationalAccessCode, DialRules} = CountryRules
-                  when is_binary(DomesticDialingPrefix), is_binary(InternationalAccessCode), is_list(DialRules) ->
-                    {ok, CountryRules};
+            case {kvc:path(<<?TRUNK_PREFIX>>, JsonTerm),
+                  kvc:path(<<?INTERNATIONAL_PREFIX>>, JsonTerm)} of
+                {TrunkPrefix, InternationalPrefix} when is_binary(TrunkPrefix), is_binary(InternationalPrefix) ->
+                    case decode_country_rules(kvc:path(<<?DIAL_RULES>>, JsonTerm)) of
+                        {ok, DialRules} ->
+                            {ok, {TrunkPrefix, InternationalPrefix, DialRules}};
+                        Error ->
+                            Error
+                    end;
                 _ ->
                     {error, {invalid_country_rules, Filename}}
             end;
@@ -247,8 +250,8 @@ binary_to_billing_tag(Bin) when is_binary(Bin) ->
 -spec binary_to_match_action(binary() | [], match_action()) -> match_action().
 binary_to_match_action([], DefaultMatchAction) ->
     DefaultMatchAction;
-binary_to_match_action(<<"reparse_without_international_access_code">>, _DefaultMatchAction) ->
-    reparse_without_international_access_code;
+binary_to_match_action(<<"reparse_without_international_prefix">>, _DefaultMatchAction) ->
+    reparse_without_international_prefix;
 binary_to_match_action(<<"return">>, _DefaultMatchAction) ->
     return.
 
@@ -256,13 +259,13 @@ binary_to_match_action(<<"return">>, _DefaultMatchAction) ->
 -spec parse_destination_internal(ephone:phone_number(), [ephone:parse_option()], #state{}) ->
                                         {ok, proplists:proplist()} | {error, Reason :: term()}.
 parse_destination_internal(Destination, Options,
-                           #state{international_access_code = InternationalAccessCode, dial_rules = DialRules} = State) ->
+                           #state{international_prefix = InternationalPrefix, dial_rules = DialRules} = State) ->
     case get_billing_tags(Destination, DialRules) of
         {return, Destination, BillingTags} ->
             {ok, [{phone_number, Destination}, {billing_tags, BillingTags}]};
-        {reparse_without_international_access_code, Destination, _BillingTags} ->
-            Len = size(InternationalAccessCode),
-            <<_InternationalAccessCode:Len/binary, DomesticNumber/binary>> = Destination,
+        {reparse_without_international_prefix, Destination, _BillingTags} ->
+            Len = size(InternationalPrefix),
+            <<_InternationalPrefix:Len/binary, DomesticNumber/binary>> = Destination,
             parse_destination_internal(DomesticNumber, Options, State)
     end.
 
@@ -277,3 +280,13 @@ get_billing_tags(Destination, [#dial_rule{billing_tags = BillingTags, mp = MP, m
     end;
 get_billing_tags(_Destination, []) ->
     undefined.
+
+
+-spec dial_rules_dir() -> file:filename().
+dial_rules_dir() ->
+    case code:priv_dir(?APP) of
+        Dir when is_list(Dir) ->
+            Dir;
+        _Error ->
+            "priv"
+    end.
