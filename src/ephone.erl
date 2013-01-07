@@ -22,7 +22,7 @@
 -export([clean_phone_number/1]).
 -export([is_country_code/1, is_iso_code/1]).
 %% -export([parse/2, is_valid/1, normalize/1, format/2]).
--export([start_dial_rules/1, stop_dial_rules/1, ensure_dial_rules_started/1]).
+-export([start_dial_rules/2, stop_dial_rules/1, ensure_dial_rules_started/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -36,7 +36,7 @@
 
 -define(APP, ephone).
 -define(BASENAME, "country_codes.json").
--define(COUNTRY_CODE, "1").
+-define(DEFAULT_COUNTRY, "us").
 -define(EXTENSION_REGEXP, "\s*(ext|ex|x|xt|#|:)+[^0-9]*\\(*([-0-9]+)\\)*#?$").
 -define(PHONE_CLEANUP_REGEXP, "[^0-9]*$").
 
@@ -50,7 +50,8 @@
 -type national_prefix()                                             :: binary().
 -type international_prefix()                                        :: binary().
 -type option()                                                      :: {filename, file:name()} | {format, json | csv}.
--type parse_option()                                                :: {country_code, country_code()} | {area_code, area_code()}.
+-type parse_option()                                                :: {iso_code, iso_code()} | {country_code, country_code()} |
+                                                                       {area_code, area_code()}.
 -type billing_tag()                                                 :: collect | domestic | emergency | international | local |
                                                                        mobile | operator | premium | toll_free.
 
@@ -63,6 +64,7 @@
          }).
 
 -record(state, {
+          default_iso_code                                          :: iso_code(),
           default_country_code                                      :: country_code(),
           default_area_code                                         :: area_code(),
           iso_codes                                                 :: dict(),
@@ -148,21 +150,21 @@ is_iso_code_1(<<>>) ->
 is_iso_code_1(_Other) ->
     false.
 
--spec start_dial_rules(iso_code()) -> ephone_dial_rules_sup:start_dial_rules_ret().
-start_dial_rules(IsoCode) ->
-    ephone_dial_rules_sup:start_dial_rules(IsoCode, ephone:country_codes(IsoCode)).
+-spec start_dial_rules(iso_code(), country_code()) -> ephone_dial_rules_sup:start_dial_rules_ret().
+start_dial_rules(IsoCode, CountryCode) ->
+    ephone_dial_rules_sup:start_dial_rules(IsoCode, CountryCode).
 
 -spec stop_dial_rules(iso_code() | pid()) -> ephone_dial_rules_sup:stop_dial_rules_ret().
 stop_dial_rules(DialRulesRef) ->
     ephone_dial_rules_sup:stop_dial_rules(DialRulesRef).
 
--spec ensure_dial_rules_started(iso_code()) -> ephone_dial_rules_sup:start_dial_rules_ret().
-ensure_dial_rules_started(IsoCode) ->
-    case whereis(ephone_dial_rules:registered_name(IsoCode)) of
-        Pid when is_pid(Pid) ->
-            {ok, Pid};
-        undefined ->
-            start_dial_rules(IsoCode)
+-spec ensure_dial_rules_started(iso_code(), country_code()) -> ephone_dial_rules_sup:start_dial_rules_ret().
+ensure_dial_rules_started(IsoCode, CountryCode) ->
+    case start_dial_rules(IsoCode, CountryCode) of
+        {error, {already_started, DialRulesRef}} ->
+            {ok, DialRulesRef};
+        Result ->
+            Result
     end.
 
 
@@ -175,13 +177,23 @@ ensure_dial_rules_started(IsoCode) ->
 -spec init(Options :: list()) -> {ok, #state{}} | {stop, Reason ::  atom()} | {stop, timeout}.
 init(Options) ->
     case load(country_codes_filename(Options), Options) of
-        {ok, {IsoCodes, CountryCodes}} ->
+        {ok, {IsoCodeDict, CountryCodeTrie}} ->
+            Code = proplists:get_value(country, Options, <<?DEFAULT_COUNTRY>>),
+            {IsoCode, CountryCode} = case is_iso_code(Code) of
+                                         true ->
+                                             {ok, Country} = dict:find(Code, IsoCodeDict),
+                                             {Code, hd(Country#country.country_codes)};
+                                         false ->
+                                             {ok, Country} = trie:find(binary_to_list(Code), CountryCodeTrie),
+                                             {Country#country.iso_code, Code}
+                                     end,
             {ok, ExtensionMP} = re:compile(?EXTENSION_REGEXP),
             {ok, CleanupMP} = re:compile(?PHONE_CLEANUP_REGEXP),
             {ok, #state{
-                    default_country_code = proplists:get_value(default_country_code, Options, <<?COUNTRY_CODE>>),
-                    iso_codes = IsoCodes,
-                    country_codes = CountryCodes,
+                    default_iso_code = IsoCode,
+                    default_country_code = CountryCode,
+                    iso_codes = IsoCodeDict,
+                    country_codes = CountryCodeTrie,
                     extension_regexp = ExtensionMP,
                     phone_cleanup_regexp = CleanupMP
                    }};
@@ -300,7 +312,7 @@ country_codes_filename(Options) ->
     end.
 
 
--spec load(file:name(), [option()]) -> {ok, Country :: proplists:proplist()} | {error, Reason :: term()}.
+-spec load(file:name(), [option()]) -> {ok, {IsoCodes :: dict(), CountryCodes :: trie:trie()}} | {error, Reason :: term()}.
 load(Filename, Options) ->
     case file:read_file(Filename) of
         {ok, Bin} ->
@@ -384,12 +396,25 @@ normalize_destination_internal(PhoneNumber, _Options) when is_binary(PhoneNumber
 parse_destination_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
     NormalizedNumber = normalize_destination_internal(PhoneNumber, Options),
-    {CountryCode, DomesticNumber} = split_country_code_internal(NormalizedNumber, State),
-    Tail = case Extension of
-               undefined -> [];
-               _         -> [{extension, Extension}]
-           end,
-    [{country_code, CountryCode}, {phone_number, DomesticNumber} | Tail].
+    IsoCode = proplists:get_value(iso_code, Options, State#state.default_iso_code),
+    case dict:find(IsoCode, State#state.iso_codes) of
+        {ok, Country} ->
+            case ephone:ensure_dial_rules_started(IsoCode, Country#country.iso_code) of
+                {ok, DialRulesRef} ->
+                    case ephone_dial_rules:parse_destination(DialRulesRef, NormalizedNumber, Options) of
+                        {ok, _ParsedDestination} = Result when Extension =:= undefined ->
+                            Result;
+                        {ok, ParsedDestination} ->
+                            {ok, ParsedDestination ++ [{extension, Extension}]};
+                        Error ->
+                            Error
+                    end;
+                Error ->
+                    Error
+            end;
+        error ->
+            {error, {invalid_iso_code, IsoCode}}
+    end.
 
 
 format_internal(Format, PhoneNumber, Options, State) ->

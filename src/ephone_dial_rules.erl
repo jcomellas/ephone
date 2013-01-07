@@ -32,17 +32,14 @@
 -define(DIAL_RULES, "dial_rules").
 -define(BILLING_TAGS, "billing_tags").
 -define(REGEXP, "regexp").
--define(MATCH_ACTION, "match_action").
 
 -type server_ref()                                                  :: atom() | {atom(), node()} |
                                                                        pid() | ephone:iso_code().
--type match_action()                                                :: return | reparse_without_international_prefix.
 
 -record(dial_rule, {
           billing_tags                                              :: ephone:billing_tag() | [ephone:billing_tag()],
           regexp                                                    :: binary(),
-          mp                                                        :: re:mp(),         %% compiled regular expression
-          match_action = return                                     :: match_action()
+          mp                                                        :: re:mp()          %% compiled regular expression
          }).
 
 -record(state, {
@@ -231,8 +228,7 @@ decode_country_rules([JsonTerm | Tail], Acc) ->
             DialRule = #dial_rule{
                           billing_tags = [binary_to_billing_tag(Bin) || Bin <- kvc:path(<<?BILLING_TAGS>>, JsonTerm)],
                           regexp = Regexp,
-                          mp = MP,
-                          match_action = binary_to_match_action(kvc:path(<<?MATCH_ACTION>>, JsonTerm), return)
+                          mp = MP
                          },
             decode_country_rules(Tail, [DialRule | Acc]);
         Error ->
@@ -247,39 +243,30 @@ binary_to_billing_tag(Bin) when is_binary(Bin) ->
     binary_to_atom(Bin, utf8).
 
 
--spec binary_to_match_action(binary() | [], match_action()) -> match_action().
-binary_to_match_action([], DefaultMatchAction) ->
-    DefaultMatchAction;
-binary_to_match_action(<<"reparse_without_international_prefix">>, _DefaultMatchAction) ->
-    reparse_without_international_prefix;
-binary_to_match_action(<<"return">>, _DefaultMatchAction) ->
-    return.
-
-
 -spec parse_destination_internal(ephone:phone_number(), [ephone:parse_option()], #state{}) ->
                                         {ok, proplists:proplist()} | {error, Reason :: term()}.
-parse_destination_internal(Destination, Options,
-                           #state{international_prefix = InternationalPrefix, dial_rules = DialRules} = State) ->
+parse_destination_internal(Destination, _Options, #state{dial_rules = DialRules}) ->
     case get_billing_tags(Destination, DialRules) of
-        {return, Destination, BillingTags} ->
+        {ok, Destination, BillingTags} ->
             {ok, [{phone_number, Destination}, {billing_tags, BillingTags}]};
-        {reparse_without_international_prefix, Destination, _BillingTags} ->
-            Len = size(InternationalPrefix),
-            <<_InternationalPrefix:Len/binary, DomesticNumber/binary>> = Destination,
-            parse_destination_internal(DomesticNumber, Options, State)
+        Error ->
+            Error
     end.
 
-get_billing_tags(Destination, [#dial_rule{billing_tags = BillingTags, mp = MP, match_action = MatchAction} | Tail]) ->
+
+-spec get_billing_tags(Destination :: ephone:phone_number(), [#dial_rule{}]) ->
+                              {ok, ephone:phone_number(), [ephone:billing_tag()]} | {error, Reason :: term()}.
+get_billing_tags(Destination, [#dial_rule{billing_tags = BillingTags, mp = MP} | Tail]) ->
     case re:run(Destination, MP) of
         {match, _Match} ->
             %% lager:debug("Destination ~s matched for billing tags '~p'~n", [Destination, BillingTags]),
-            {MatchAction, Destination, BillingTags};
+            {ok, Destination, BillingTags};
         nomatch ->
             %% lager:debug("Destination ~s did not match for billing tags '~p'~n", [Destination, BillingTags]),
             get_billing_tags(Destination, Tail)
     end;
-get_billing_tags(_Destination, []) ->
-    undefined.
+get_billing_tags(Destination, []) ->
+    {error, {invalid_destination, Destination}}.
 
 
 -spec dial_rules_dir() -> file:filename().
