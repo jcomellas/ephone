@@ -1,50 +1,70 @@
 {
     "country_code": "ar",
+    "trunk_prefix": "0",
+    "international_prefix": "00",
+    "normalized_format": "%C%a%n",
     "dial_rules":
     [
-        {"billing_tags": ["local"],
-         "regexp": "^[2-9][0-9]{5,}$",
-         "display_name": "Local numbers"},
+        {
+            "billing_tags": ["local"],
+            "regexp": "^[2-9][0-9]{5,}$",
+            "display_name": "Local numbers"
+        },
+        {
+            "billing_tags": ["local", "mobile"],
+            "regexp": "^15[1-9][0-9]{5,}$",
+            "display_name": "Mobile numbers"
+        },
+        {
+            "billing_tags": ["local"],
+            "regexp": "^0810[0-9]+$",
+            "display_name": "Local rate numbers"
+        },
+        {
+            "billing_tags": ["toll_free"],
+            "regexp": "^0(800|822|823)[0-9]+$",
+            "display_name": "Toll-free numbers"
+        },
+        {
+            "billing_tags": ["premium"],
+            "regexp": "0(600|605|609)[0-9]+$",
+            "display_name": "Premium rate phone numbers"
+        },
+        {
+            "billing_tags": ["domestic"],
+            "regexp": "^0[1-9][0-9]{9,}$",
+            "display_name": "Domestic numbers"
+        },
 
-        {"billing_tags": ["local", "mobile"],
-         "regexp": "^15[1-9][0-9]{5,}$",
-         "display_name": "Mobile numbers"},
-
-        {"billing_tags": ["local"],
-         "regexp": "^0810[0-9]+$",
-         "display_name": "Local rate numbers"},
-        {"billing_tags": ["toll_free"],
-         "regexp": "^0(800|822|823)[0-9]+$",
-         "display_name": "Toll-free numbers"},
-        {"billing_tags": ["premium"],
-         "regexp": "0(600|605|609)[0-9]+$",
-         "display_name": "Premium rate phone numbers"},
-
-        {"billing_tags": ["domestic"],
-         "regexp": "^0[1-9][0-9]{9,}$",
-         "display_name": "Domestic numbers"},
-
-        {"billing_tags": ["emergency"],
-         "regexp": "^911$",
-         "display_name": "Emergency numbers"},
-
-        {"billing_tags": ["emergency"],
-         "regexp": "^1[0-9]{2}$",
-         "display_name": "Emergency numbers"},
-
-        {"billing_tags": ["international", "premium"],
-         "regexp": "^00(423)[0-9]+$",
-         "display_name": "International premium numbers (Liechtenstein)"},
-        {"billing_tags": ["international"],
-         "regexp": "^00[1-9][0-9]+$",
-         "display_name": "International numbers"},
-
-        {"billing_tags": ["operator"],
-         "regexp": "^19$",
-         "display_name": "Operator"},
-
-        {"billing_tags": ["operator", "international"].
-         "regexp": "^000$",
-         "display_name": "International Operator"}
+        {
+            "billing_tags": ["emergency"],
+            "regexp": "^911$",
+            "display_name": "Emergency numbers"
+        },
+        {
+            "billing_tags": ["emergency"],
+            "regexp": "^1[0-9]{2}$",
+            "display_name": "Emergency numbers"
+        },
+        {
+            "billing_tags": ["international", "premium"],
+            "regexp": "^00(423)[0-9]+$",
+            "display_name": "International premium numbers (Liechtenstein)"
+        },
+        {
+            "billing_tags": ["international"],
+            "regexp": "^00[1-9][0-9]+$",
+            "display_name": "International numbers"
+        },
+        {
+            "billing_tags": ["operator"],
+            "regexp": "^19$",
+            "display_name": "Operator"
+        },
+        {
+            "billing_tags": ["operator", "international"],
+            "regexp": "^000$",
+            "display_name": "International Operator"
+        }
     ]
 }
