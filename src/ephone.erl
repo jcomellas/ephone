@@ -17,7 +17,7 @@
 -export([start_link/0, start_link/1]).
 -export([country/1, country_codes/1, iso_code/1]).
 -export([normalize_did/2, parse_did/2]).
--export([normalize_outbound/2, parse_outbound/2]).
+-export([normalize_destination/2, parse_destination/2]).
 -export([format/3]).
 -export([clean_phone_number/1]).
 -export([is_country_code/1, is_iso_code/1]).
@@ -29,7 +29,8 @@
          terminate/2, code_change/3]).
 
 -export_type([iso_code/0, country_code/0, area_code/0, phone_number/0, extension/0,
-              phone_field/0, dialing_prefix/0, option/0, parse_option/0, billing_tag/0]).
+              phone_field/0, national_prefix/0, international_prefix/0,
+              option/0, parse_option/0, billing_tag/0]).
 
 -define(SERVER, ?MODULE).
 
@@ -46,7 +47,8 @@
 -type extension()                                                   :: binary().
 -type phone_field()                                                 :: {country_code, country_code()} | {area_code, area_code()} |
                                                                        {number, number()} | {extension, extension()}.
--type dialing_prefix()                                              :: binary().
+-type national_prefix()                                             :: binary().
+-type international_prefix()                                        :: binary().
 -type option()                                                      :: {filename, file:name()} | {format, json | csv}.
 -type parse_option()                                                :: {country_code, country_code()} | {area_code, area_code()}.
 -type billing_tag()                                                 :: collect | domestic | emergency | international | local |
@@ -56,8 +58,8 @@
           iso_code = erlang:error({required, iso_code})             :: iso_code(),
           country_codes = erlang:error({required, country_code})    :: country_code() | [country_code()],
           country_name                                              :: binary(),
-          domestic_dialing_prefix                                   :: dialing_prefix(),
-          international_dialing_prefix                              :: dialing_prefix()
+          national_prefix                                           :: national_prefix(),
+          international_prefix                                      :: international_prefix()
          }).
 
 -record(state, {
@@ -104,13 +106,13 @@ normalize_did(PhoneNumber, Options) ->
 parse_did(PhoneNumber, Options) ->
     gen_server:call(?SERVER, {parse_did, PhoneNumber, Options}).
 
--spec normalize_outbound(phone_number(), [parse_option()]) -> phone_number().
-normalize_outbound(PhoneNumber, Options) ->
-    gen_server:call(?SERVER, {normalize_outbound, PhoneNumber, Options}).
+-spec normalize_destination(phone_number(), [parse_option()]) -> phone_number().
+normalize_destination(PhoneNumber, Options) ->
+    gen_server:call(?SERVER, {normalize_destination, PhoneNumber, Options}).
 
--spec parse_outbound(phone_number(), [parse_option()]) -> proplists:proplist().
-parse_outbound(PhoneNumber, Options) ->
-    gen_server:call(?SERVER, {parse_outbound, PhoneNumber, Options}).
+-spec parse_destination(phone_number(), [parse_option()]) -> proplists:proplist().
+parse_destination(PhoneNumber, Options) ->
+    gen_server:call(?SERVER, {parse_destination, PhoneNumber, Options}).
 
 -spec format(Format :: binary() | string(), phone_number() | [phone_field()], [parse_option()]) -> iolist().
 format(Format, PhoneNumber, Options) when is_binary(Format) ->
@@ -148,7 +150,7 @@ is_iso_code_1(_Other) ->
 
 -spec start_dial_rules(iso_code()) -> ephone_dial_rules_sup:start_dial_rules_ret().
 start_dial_rules(IsoCode) ->
-    ephone_dial_rules_sup:start_dial_rules(IsoCode).
+    ephone_dial_rules_sup:start_dial_rules(IsoCode, ephone:country_codes(IsoCode)).
 
 -spec stop_dial_rules(iso_code() | pid()) -> ephone_dial_rules_sup:stop_dial_rules_ret().
 stop_dial_rules(DialRulesRef) ->
@@ -208,8 +210,8 @@ handle_call({country, Code}, _From, State) ->
                     [{iso_code, Country#country.iso_code},
                      {country_codes, Country#country.country_codes},
                      {country_name, Country#country.country_name},
-                     {domestic_dialing_prefix, Country#country.domestic_dialing_prefix},
-                     {international_dialing_prefix, Country#country.international_dialing_prefix}];
+                     {national_prefix, Country#country.national_prefix},
+                     {international_prefix, Country#country.international_prefix}];
                 error ->
                     undefined
             end,
@@ -240,12 +242,12 @@ handle_call({split_extension, PhoneNumber}, _From, State) when is_binary(PhoneNu
 %% parse_did/2 callback
 handle_call({parse_did, PhoneNumber, Options}, _From, State) ->
     {reply, parse_did_internal(PhoneNumber, Options, State), State};
-%% normalize_outbound/1 callback
-handle_call({normalize_outbound, PhoneNumber, Options}, _From, State) when is_binary(PhoneNumber) ->
-    {reply, normalize_outbound_internal(PhoneNumber, Options), State};
-%% parse_outbound/2 callback
-handle_call({parse_outbound, PhoneNumber, Options}, _From, State) ->
-    {reply, parse_outbound_internal(PhoneNumber, Options, State), State};
+%% normalize_destination/1 callback
+handle_call({normalize_destination, PhoneNumber, Options}, _From, State) when is_binary(PhoneNumber) ->
+    {reply, normalize_destination_internal(PhoneNumber, Options), State};
+%% parse_destination/2 callback
+handle_call({parse_destination, PhoneNumber, Options}, _From, State) ->
+    {reply, parse_destination_internal(PhoneNumber, Options, State), State};
 %% format/3 callback
 handle_call({format, Format, PhoneNumber, Options}, _From, State) ->
     {reply, format_internal(Format, PhoneNumber, Options, State), State};
@@ -294,14 +296,7 @@ country_codes_filename(Options) ->
         Str when is_list(Str) ->
             Str;
         undefined ->
-            PrivDir =
-                case code:priv_dir(?APP) of
-                    Dir when is_list(Dir) ->
-                        Dir;
-                    _Error ->
-                        "priv"
-                end,
-            filename:join([PrivDir, ?BASENAME])
+            filename:join([country_codes_dir(), ?BASENAME])
     end.
 
 
@@ -336,25 +331,23 @@ decode_json_countries(JsonTerm) ->
 
 -spec decode_json_countries(jsx:json_term(), Acc :: {IsoCodes :: dict(), CountryCodes :: trie:trie()}) ->
                                    {IsoCodes :: dict(), CountryCodes :: trie:trie()}.
-decode_json_countries([JsonTerm | Tail], {IsoCodes, CountryCodes}) ->
+decode_json_countries([JsonTerm | Tail], {IsoCodeDict, CountryCodeTrie}) ->
     IsoCode = kvc:path(<<"iso_code">>, JsonTerm),
-    CountryCode = kvc:path(<<"country_code">>, JsonTerm),
+    CountryCodes = case kvc:path(<<"country_codes">>, JsonTerm) of
+                       CountryCode when is_binary(CountryCode) -> [CountryCode];
+                       List when is_list(List)                 -> List
+                   end,
     Country = #country{
-                 country_codes = CountryCode,
+                 country_codes = CountryCodes,
                  iso_code = IsoCode,
                  country_name = kvc:path(<<"country_name">>, JsonTerm),
-                 domestic_dialing_prefix = kvc:path(<<"domestic_dialing_prefix">>, JsonTerm),
-                 international_dialing_prefix = kvc:path(<<"international_dialing_prefix">>, JsonTerm)
+                 national_prefix = kvc:path(<<"national_prefix">>, JsonTerm),
+                 international_prefix = kvc:path(<<"international_prefix">>, JsonTerm)
                 },
-    NewIsoCodes = dict:store(IsoCode, Country, IsoCodes),
-    NewCountryCodes = case is_list(CountryCode) of
-                          true ->
-                              lists:foldl(fun (Code, Trie) -> trie:store(binary_to_list(Code), Country, Trie) end,
-                                          CountryCodes, CountryCode);
-                          false ->
-                              trie:store(binary_to_list(CountryCode), Country, CountryCodes)
-                      end,
-    decode_json_countries(Tail, {NewIsoCodes, NewCountryCodes});
+    NewIsoCodeDict = dict:store(IsoCode, Country, IsoCodeDict),
+    NewCountryCodeTrie = lists:foldl(fun (Code, Trie) -> trie:store(binary_to_list(Code), Country, Trie) end,
+                                     CountryCodeTrie, CountryCodes),
+    decode_json_countries(Tail, {NewIsoCodeDict, NewCountryCodeTrie});
 decode_json_countries([], Acc) ->
     Acc.
 
@@ -381,16 +374,16 @@ parse_did_internal(FullPhoneNumber, Options, State) ->
     [{country_code, CountryCode}, {phone_number, DomesticNumber} | Tail].
 
 
-%% @doc Remove non-digit characters from a dialed (outbound) phone number.
--spec normalize_outbound_internal(phone_number(), [parse_option()]) -> phone_number().
-normalize_outbound_internal(PhoneNumber, _Options) when is_binary(PhoneNumber) ->
+%% @doc Remove non-digit characters from a dialed (destination) phone number.
+-spec normalize_destination_internal(phone_number(), [parse_option()]) -> phone_number().
+normalize_destination_internal(PhoneNumber, _Options) when is_binary(PhoneNumber) ->
     << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>.
 
 
--spec parse_outbound_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
-parse_outbound_internal(FullPhoneNumber, Options, State) ->
+-spec parse_destination_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
+parse_destination_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
-    NormalizedNumber = normalize_outbound_internal(PhoneNumber, Options),
+    NormalizedNumber = normalize_destination_internal(PhoneNumber, Options),
     {CountryCode, DomesticNumber} = split_country_code_internal(NormalizedNumber, State),
     Tail = case Extension of
                undefined -> [];
@@ -404,7 +397,7 @@ format_internal(Format, PhoneNumber, Options, State) ->
                        <<$+, _Tail/binary>> ->
                            parse_did_internal(PhoneNumber, Options, State);
                        _ when is_binary(PhoneNumber) ->
-                           parse_outbound_internal(PhoneNumber, Options, State);
+                           parse_destination_internal(PhoneNumber, Options, State);
                        [{_Key, _Value} | _Tail] ->
                            lists:foldl(fun ({Key1, _Value1} = Tuple, Acc) ->
                                                lists:keystore(Key1, 1, Acc, Tuple)
@@ -495,4 +488,14 @@ split_extension_internal(FullPhoneNumber, State) ->
             end;
         nomatch ->
             {FullPhoneNumber, undefined}
+    end.
+
+
+-spec country_codes_dir() -> file:name().
+country_codes_dir() ->
+    case code:priv_dir(?APP) of
+        Dir when is_list(Dir) ->
+            Dir;
+        _Error ->
+            "priv"
     end.
