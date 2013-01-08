@@ -31,7 +31,7 @@ doc:
 	@$(REBAR) doc
 
 test:
-	@$(REBAR) eunit
+	@$(REBAR) ct
 
 test-console:
 	$(ERL) -sname $(APPLICATION)_test $(TEST_EPATH)
