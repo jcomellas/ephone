@@ -29,7 +29,7 @@
          terminate/2, code_change/3]).
 
 -export_type([iso_code/0, country_code/0, area_code/0, phone_number/0, extension/0,
-              phone_field/0, national_prefix/0, international_prefix/0,
+              phone_field/0, trunk_prefix/0, international_prefix/0,
               option/0, parse_option/0, billing_tag/0]).
 
 -define(SERVER, ?MODULE).
@@ -47,7 +47,7 @@
 -type extension()                                                   :: binary().
 -type phone_field()                                                 :: {country_code, country_code()} | {area_code, area_code()} |
                                                                        {number, number()} | {extension, extension()}.
--type national_prefix()                                             :: binary().
+-type trunk_prefix()                                                :: binary().
 -type international_prefix()                                        :: binary().
 -type option()                                                      :: {filename, file:name()} | {format, json | csv}.
 -type parse_option()                                                :: {iso_code, iso_code()} | {country_code, country_code()} |
@@ -59,7 +59,7 @@
           iso_code = erlang:error({required, iso_code})             :: iso_code(),
           country_codes = erlang:error({required, country_code})    :: country_code() | [country_code()],
           country_name                                              :: binary(),
-          national_prefix                                           :: national_prefix(),
+          trunk_prefix                                              :: trunk_prefix(),
           international_prefix                                      :: international_prefix()
          }).
 
@@ -213,7 +213,7 @@ handle_call({country, Code}, _From, State) ->
                       false ->
                           case is_country_code(Code) of
                               true ->
-                                  fun () -> trie:find(Code, State#state.country_codes) end;
+                                  fun () -> trie:find(binary_to_list(Code), State#state.country_codes) end;
                               false ->
                                   fun () -> error end
                           end
@@ -223,7 +223,7 @@ handle_call({country, Code}, _From, State) ->
                     [{iso_code, Country#country.iso_code},
                      {country_codes, Country#country.country_codes},
                      {country_name, Country#country.country_name},
-                     {national_prefix, Country#country.national_prefix},
+                     {trunk_prefix, Country#country.trunk_prefix},
                      {international_prefix, Country#country.international_prefix}];
                 error ->
                     undefined
@@ -354,7 +354,7 @@ decode_json_countries([JsonTerm | Tail], {IsoCodeDict, CountryCodeTrie}) ->
                  country_codes = CountryCodes,
                  iso_code = IsoCode,
                  country_name = kvc:path(<<"country_name">>, JsonTerm),
-                 national_prefix = kvc:path(<<"national_prefix">>, JsonTerm),
+                 trunk_prefix = kvc:path(<<"trunk_prefix">>, JsonTerm),
                  international_prefix = kvc:path(<<"international_prefix">>, JsonTerm)
                 },
     NewIsoCodeDict = dict:store(IsoCode, Country, IsoCodeDict),

@@ -46,8 +46,8 @@
           iso_code = erlang:error({required, iso_code})             :: ephone:iso_code(),
           country_codes = erlang:error({required, country_code})    :: [ephone:country_code()],
           default_area_code                                         :: ephone:area_code(),
-          trunk_prefix                                              :: ephone:dialing_prefix(),
-          international_prefix                                      :: ephone:dialing_prefix(),
+          trunk_prefix                                              :: ephone:trunk_prefix(),
+          international_prefix                                      :: ephone:international_prefix(),
           dial_rules = []                                           :: [#dial_rule{}]
          }).
 
@@ -70,11 +70,11 @@ registered_name(IsoCode) when is_binary(IsoCode) ->
 iso_code(ServerRef) ->
     call(ServerRef, iso_code).
 
--spec trunk_prefix(server_ref()) -> ephone:dialing_prefix().
+-spec trunk_prefix(server_ref()) -> ephone:trunk_prefix().
 trunk_prefix(ServerRef) ->
     call(ServerRef, trunk_prefix).
 
--spec international_prefix(server_ref()) -> ephone:dialing_prefix().
+-spec international_prefix(server_ref()) -> ephone:international_prefix().
 international_prefix(ServerRef) ->
     call(ServerRef, international_prefix).
 
@@ -135,10 +135,10 @@ handle_call({parse_destination, Destination, Options}, _From, State) ->
 %% reload/1 callback
 handle_call(reload, _From, State) ->
     case load_country_rules(State#state.iso_code) of
-        {ok, {DomesticDialingPrefix, InternationalAccessCode, DialRules}} ->
+        {ok, {TrunkPrefix, InternationalPrefix, DialRules}} ->
             NewState = State#state{
-                         trunk_prefix = DomesticDialingPrefix,
-                         international_prefix = InternationalAccessCode,
+                         trunk_prefix = TrunkPrefix,
+                         international_prefix = InternationalPrefix,
                          dial_rules = DialRules
                         },
             {reply, ok, NewState};
