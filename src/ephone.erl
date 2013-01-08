@@ -112,7 +112,7 @@ parse_did(PhoneNumber, Options) ->
 normalize_destination(PhoneNumber, Options) ->
     gen_server:call(?SERVER, {normalize_destination, PhoneNumber, Options}).
 
--spec parse_destination(phone_number(), [parse_option()]) -> proplists:proplist().
+-spec parse_destination(phone_number(), [parse_option()]) -> {ok, proplists:proplist()} | {error, Reason :: term()}.
 parse_destination(PhoneNumber, Options) ->
     gen_server:call(?SERVER, {parse_destination, PhoneNumber, Options}).
 
@@ -197,8 +197,8 @@ init(Options) ->
                     extension_regexp = ExtensionMP,
                     phone_cleanup_regexp = CleanupMP
                    }};
-        Error ->
-            Error
+        {error, Reason} ->
+            {stop, Reason}
     end.
 
 
@@ -207,17 +207,18 @@ init(Options) ->
 -spec handle_call(Request :: term(), From :: term(), #state{}) -> {reply, Reply :: term(), #state{}}.
 %% country/1 callback
 handle_call({country, Code}, _From, State) ->
-    {Mod, Dict, Key} = case is_iso_code(Code) of
-                           true  ->
-                               {dict, State#state.iso_codes, Code};
-                           false ->
-                               if
-                                   is_binary(Code)  -> {trie, State#state.country_codes, binary_to_list(Code)};
-                                   is_list(Code)    -> {trie, State#state.country_codes, Code};
-                                   is_integer(Code) -> {trie, State#state.country_codes, integer_to_list(Code)}
-                               end
-                       end,
-    Reply = case Mod:find(Key, Dict) of
+    FindCountry = case is_iso_code(Code) of
+                      true  ->
+                          fun () -> dict:find(Code, State#state.iso_codes) end;
+                      false ->
+                          case is_country_code(Code) of
+                              true ->
+                                  fun () -> trie:find(Code, State#state.country_codes) end;
+                              false ->
+                                  fun () -> error end
+                          end
+                  end,
+    Reply = case FindCountry() of
                 {ok, Country} ->
                     [{iso_code, Country#country.iso_code},
                      {country_codes, Country#country.country_codes},
@@ -392,7 +393,8 @@ normalize_destination_internal(PhoneNumber, _Options) when is_binary(PhoneNumber
     << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>.
 
 
--spec parse_destination_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
+-spec parse_destination_internal(phone_number(), [parse_option()], #state{}) ->
+                                        {ok, proplists:proplist()} | {error, Reason :: term()}.
 parse_destination_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
     NormalizedNumber = normalize_destination_internal(PhoneNumber, Options),
