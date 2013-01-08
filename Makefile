@@ -6,7 +6,7 @@ EPATH := -pa ebin -pz deps/*/ebin
 TEST_EPATH := -pa .eunit -pz deps/*/ebin
 
 DIALYZER=dialyzer
-DIALYZER_OPTS=-Wno_return -Wrace_conditions -Wunderspecs -Wno_undefined_callbacks --fullpath
+DIALYZER_OPTS=-Wno_return -Wrace_conditions -Wno_undefined_callbacks --fullpath
 
 .PHONY: all clean compile console deps dialyze doc test test-console
 
