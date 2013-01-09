@@ -375,7 +375,14 @@ normalize_did_internal(<<$+, PhoneNumber/binary>>, _Options, _State) ->
 normalize_did_internal(PhoneNumber, Options, State) ->
     CountryCode = proplists:get_value(country_code, Options, State#state.default_country_code),
     CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>,
-    <<$+, CountryCode/binary, CleanNumber/binary>>.
+    CountryCodeLen = byte_size(CountryCode),
+    case CleanNumber of
+        <<CountryCode:CountryCodeLen/binary, _DomesticNumber/binary>> ->
+            <<$+, CleanNumber/binary>>;
+        _ ->
+            <<$+, CountryCode/binary, CleanNumber/binary>>
+    end.
+
 
 
 -spec parse_did_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
