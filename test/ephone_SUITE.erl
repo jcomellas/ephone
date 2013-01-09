@@ -58,7 +58,15 @@ groups() ->
           t_parse_destination_us_domestic_collect,
           t_parse_destination_us_emergency,
           t_parse_destination_us_international_premium,
-          t_parse_destination_us_international]}
+          t_parse_destination_us_international,
+          t_parse_did_us_domestic_with_extension_1,
+          t_parse_did_us_domestic_with_extension_2,
+          t_parse_did_us_domestic_with_extension_3,
+          t_parse_did_us_domestic_with_extension_4,
+          t_parse_did_us_domestic_with_extension_5,
+          t_parse_did_us_domestic_with_extension_6,
+          t_parse_did_us_domestic_with_extension_7,
+          t_parse_did_us_domestic_with_extension_8]}
     ].
 
 all() ->
@@ -167,6 +175,30 @@ t_parse_destination_us_international_operator(_) ->
     {billing_tags, [international, operator]} = lists:keyfind(billing_tags, 1, ParsedDestination),
     {phone_number, <<"00">>} = lists:keyfind(phone_number, 1, ParsedDestination).
 
+t_parse_did_us_domestic_with_extension_1(_) ->
+    check_did_with_extension(<<"(234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+
+t_parse_did_us_domestic_with_extension_2(_) ->
+    check_did_with_extension(<<"+1 (234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+
+t_parse_did_us_domestic_with_extension_3(_) ->
+    check_did_with_extension(<<"12 3456 789 01 x1234">>, <<"1">>, <<"2345678901">>, <<"1234">>).
+
+t_parse_did_us_domestic_with_extension_4(_) ->
+    check_did_with_extension(<<"(234)567-8901x12">>, <<"1">>, <<"2345678901">>, <<"12">>).
+
+t_parse_did_us_domestic_with_extension_5(_) ->
+    check_did_with_extension(<<"(234)567-8901ext12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
+
+t_parse_did_us_domestic_with_extension_6(_) ->
+    check_did_with_extension(<<"(234)567-8901 extension12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
+
+t_parse_did_us_domestic_with_extension_7(_) ->
+    check_did_with_extension(<<"234.567.8901 #12">>, <<"1">>, <<"2345678901">>, <<"12">>).
+
+t_parse_did_us_domestic_with_extension_8(_) ->
+    check_did_with_extension(<<"1-234-567-8901 ext. 123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+
 
 %
 %  INTERNAL
@@ -185,3 +217,10 @@ start_server(Config) ->
 
 setup_environment(_Config) ->
     application:set_env(ephone, default_iso_code, <<"us">>).
+
+
+check_did_with_extension(Did, CountryCode, PhoneNumber, Extension) ->
+    ParsedDid = ephone:parse_did(Did, [{country_code, CountryCode}]),
+    {country_code, CountryCode} = lists:keyfind(country_code, 1, ParsedDid),
+    {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDid),
+    {extension, Extension} = lists:keyfind(extension, 1, ParsedDid).
