@@ -20,7 +20,7 @@
 -export([normalize_destination/2, parse_destination/2]).
 -export([format/3]).
 -export([clean_phone_number/1]).
--export([is_country_code/1, is_iso_code/1]).
+-export([is_phone_number/1, is_country_code/1, is_iso_code/1]).
 %% -export([parse/2, is_valid/1, normalize/1, format/2]).
 -export([start_dial_rules/2, stop_dial_rules/1, ensure_dial_rules_started/2]).
 
@@ -37,8 +37,7 @@
 -define(APP, ephone).
 -define(BASENAME, "country_codes.json").
 -define(DEFAULT_COUNTRY, "us").
--define(EXTENSION_REGEXP, "\s*(ext|ex|x|xt|#|:)+[^0-9]*\\(*([-0-9]+)\\)*#?$").
--define(PHONE_CLEANUP_REGEXP, "[^0-9]*$").
+-define(PHONE_NUMBER_REGEX, "^([\\+]{0,1}[0-9\\-\\(\\)\\.\\s/]+)(\\s*(x|xt|ex|ext|ext\\.|extension|#|:)\\s*([0-9]+)){0,1}$").
 
 -type iso_code()                                                    :: binary().
 -type country_code()                                                :: binary().
@@ -69,8 +68,7 @@
           default_area_code                                         :: area_code(),
           iso_codes                                                 :: dict(),
           country_codes                                             :: trie:trie(),
-          extension_regexp                                          :: re:mp(),
-          phone_cleanup_regexp                                      :: re:mp()
+          phone_number_regex                                        :: re:mp()
          }).
 
 
@@ -123,6 +121,10 @@ format(Format, PhoneNumber, Options) when is_binary(Format) ->
 -spec clean_phone_number(phone_number()) -> phone_number().
 clean_phone_number(PhoneNumber) ->
     << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>.
+
+-spec is_phone_number(binary()) -> boolean().
+is_phone_number(PhoneNumber) ->
+    gen_server:call(?SERVER, {is_phone_number, PhoneNumber}).
 
 -spec is_country_code(binary()) -> boolean().
 is_country_code(<<_Char, _Tail/binary>> = CountryCode) ->
@@ -187,15 +189,13 @@ init(Options) ->
                                              {ok, Country} = trie:find(binary_to_list(Code), CountryCodeTrie),
                                              {Country#country.iso_code, Code}
                                      end,
-            {ok, ExtensionMP} = re:compile(?EXTENSION_REGEXP),
-            {ok, CleanupMP} = re:compile(?PHONE_CLEANUP_REGEXP),
+            {ok, PhoneNumberRegex} = re:compile(?PHONE_NUMBER_REGEX),
             {ok, #state{
                     default_iso_code = IsoCode,
                     default_country_code = CountryCode,
                     iso_codes = IsoCodeDict,
                     country_codes = CountryCodeTrie,
-                    extension_regexp = ExtensionMP,
-                    phone_cleanup_regexp = CleanupMP
+                    phone_number_regex = PhoneNumberRegex
                    }};
         {error, Reason} ->
             {stop, Reason}
@@ -264,6 +264,9 @@ handle_call({parse_destination, PhoneNumber, Options}, _From, State) ->
 %% format/3 callback
 handle_call({format, Format, PhoneNumber, Options}, _From, State) ->
     {reply, format_internal(Format, PhoneNumber, Options, State), State};
+%% is_phone_number/1 callback
+handle_call({is_phone_number, PhoneNumber}, _From, State) ->
+    {reply, is_phone_number_internal(PhoneNumber, State), State};
 handle_call(_Request, _From, State) ->
     {reply, {error, not_implemented}, State}.
 
@@ -481,6 +484,14 @@ format_field($X, ParsedNumber, _State) ->
     end.
 
 
+-spec is_phone_number_internal(binary(), #state{}) -> boolean().
+is_phone_number_internal(PhoneNumber, #state{phone_number_regex = PhoneNumberRegex}) ->
+    case re:run(PhoneNumber, PhoneNumberRegex) of
+        {match, _} -> true;
+        nomatch    -> false
+    end.
+
+
 -spec split_country_code_internal(phone_number(), #state{}) -> {country_code() | undefined, phone_number()}.
 split_country_code_internal(<<$+, PhoneNumber/binary>>, State) ->
     split_country_code_internal(PhoneNumber, State);
@@ -499,20 +510,14 @@ split_country_code_internal(PhoneNumber, State) ->
 
 -spec split_extension_internal(phone_number(), #state{}) -> {phone_number(), extension() | undefined}.
 split_extension_internal(FullPhoneNumber, State) ->
-    case re:run(FullPhoneNumber, State#state.extension_regexp) of
-        {match, [{PhoneLen, _} | Tail]} ->
-            %% Get the position of the extension number from the last match group
-            [{ExtPos, ExtLen} | _] = lists:reverse(Tail),
-            SepLen = ExtPos - PhoneLen,
-            <<DirtyPhoneNumber:PhoneLen/binary, _Sep:SepLen/binary, Extension:ExtLen/binary, _Rest/binary>> = FullPhoneNumber,
-            %% Remove the cruft that may have been left at the end of the phone number
-            case re:run(DirtyPhoneNumber, State#state.phone_cleanup_regexp) of
-                {match, [{CleanLen, _} | _Tail1]} ->
-                    <<CleanNumber:CleanLen/binary, _Rest1/binary>> = DirtyPhoneNumber,
-                    {CleanNumber, Extension};
-                nomatch ->
-                    {DirtyPhoneNumber, Extension}
-            end;
+    case re:run(FullPhoneNumber, State#state.phone_number_regex) of
+        {match, [_FullPosLen, PhonePosLen]} ->
+            %% Phone number without an extension: the phone number is in the first match group
+            {binary_part(FullPhoneNumber, PhonePosLen), undefined};
+        {match, [_FullPosLen, PhonePosLen, _Group2, _Group3, ExtPosLen]} ->
+            %% Phone number with an extension: the phone number is in the first match group
+            %% and the extension in the 4th (last) one
+            {binary_part(FullPhoneNumber, PhonePosLen), binary_part(FullPhoneNumber, ExtPosLen)};
         nomatch ->
             {FullPhoneNumber, undefined}
     end.
