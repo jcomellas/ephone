@@ -122,81 +122,50 @@ t_parse_did_us_international_formatted(_) ->
 t_parse_did_us_canonical(_) ->
     check_parse_did(<<"+16502530000">>, <<"1">>, <<"6502530000">>).
 
-
 t_parse_destination_us_local(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"2530000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [local]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"2530000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"2530000">>, <<"us">>, <<"2530000">>, [local]).
 
 t_parse_destination_us_local_formatted(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"253-0000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [local]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"2530000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"253-0000">>, <<"us">>, <<"2530000">>, [local]).
 
 t_parse_destination_us_toll_free(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"18006984637">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [toll_free]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"18006984637">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"18006984637">>, <<"us">>, <<"18006984637">>, [toll_free]).
 
 t_parse_destination_us_toll_free_formatted(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"1‑800‑698‑4637">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [toll_free]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"18006984637">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"1‑800‑698‑4637">>, <<"us">>, <<"18006984637">>, [toll_free]).
 
 t_parse_destination_us_international_canada(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"1-613-231-2020">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [international]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"16132312020">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"1-613-231-2020">>, <<"us">>, <<"16132312020">>, [international]).
 
 t_parse_destination_us_international_caribbean(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"(876) 702-6000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [international]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"8767026000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"(876) 702-6000">>, <<"us">>, <<"8767026000">>, [international]).
 
 t_parse_destination_us_domestic(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"1 (650) 253-0000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [domestic]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"16502530000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"1 (650) 253-0000">>, <<"us">>, <<"16502530000">>, [domestic]).
 
 t_parse_destination_us_domestic_10_digit(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"(650) 253-0000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [domestic]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"6502530000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"(650) 253-0000">>, <<"us">>, <<"6502530000">>, [domestic]).
 
 t_parse_destination_us_domestic_collect(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"0-650-253-0000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [domestic, collect]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"06502530000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"0-650-253-0000">>, <<"us">>, <<"06502530000">>, [domestic, collect]).
 
 t_parse_destination_us_emergency(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"911">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [emergency]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"911">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"911">>, <<"us">>, <<"911">>, [emergency]).
 
 t_parse_destination_us_international_premium(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"011 423 239 63 63">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [international, premium]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"0114232396363">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"011 423 239 63 63">>, <<"us">>, <<"0114232396363">>, [international, premium]).
 
 t_parse_destination_us_international(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"011 (54) 11-4344-3600">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [international]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"011541143443600">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"011 (54) 11-4344-3600">>, <<"us">>, <<"011541143443600">>, [international]).
 
 t_parse_destination_us_premium(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"900-622-8000">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [premium]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"9006228000">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"900-622-8000">>, <<"us">>, <<"9006228000">>, [premium]).
 
 t_parse_destination_us_operator(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"0">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [operator]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"0">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"0">>, <<"us">>, <<"0">>, [operator]).
 
 t_parse_destination_us_international_operator(_) ->
-    {ok, ParsedDestination} = ephone:parse_destination(<<"00">>, [{iso_code, <<"us">>}]),
-    {billing_tags, [international, operator]} = lists:keyfind(billing_tags, 1, ParsedDestination),
-    {phone_number, <<"00">>} = lists:keyfind(phone_number, 1, ParsedDestination).
+    check_parse_destination(<<"00">>, <<"us">>, <<"00">>, [international, operator]).
 
 t_parse_did_us_domestic_with_extension_1(_) ->
     check_parse_did_with_extension(<<"(234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
@@ -251,3 +220,8 @@ check_parse_did_with_extension(Did, CountryCode, PhoneNumber, Extension) ->
     {country_code, CountryCode} = lists:keyfind(country_code, 1, ParsedDid),
     {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDid),
     {extension, Extension} = lists:keyfind(extension, 1, ParsedDid).
+
+check_parse_destination(Destination, IsoCode, PhoneNumber, BillingTags) ->
+    {ok, ParsedDestination} = ephone:parse_destination(Destination, [{iso_code, <<"us">>}]),
+    {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDestination),
+    {billing_tags, BillingTags} = lists:keyfind(billing_tags, 1, ParsedDestination).
