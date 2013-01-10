@@ -40,6 +40,14 @@ end_per_testcase(_TestCase, _Config) ->
 
 groups() ->
     [
+        {common, [parallel],
+         [t_clean_phone_number_1,
+          t_clean_phone_number_2,
+          t_clean_phone_number_3,
+          t_clean_phone_number_4,
+          t_clean_phone_number_5,
+          t_clean_phone_number_6,
+          t_normalize_did_invalid]},
         {us, [parallel],
          [t_normalize_did_us_domestic,
           t_normalize_did_us_domestic_formatted,
@@ -70,34 +78,49 @@ groups() ->
     ].
 
 all() ->
-    [{group, us}].
+    [{group, common},
+     {group, us}].
+
+
+t_clean_phone_number_1(_) ->
+    <<"16502530000">> = ephone:clean_phone_number(<<"16502530000">>).
+
+t_clean_phone_number_2(_) ->
+    <<"16502530000">> = ephone:clean_phone_number(<<"+16502530000">>).
+
+t_clean_phone_number_3(_) ->
+    <<"16502530000">> = ephone:clean_phone_number(<<"+1 (650) 253-0000">>).
+
+t_clean_phone_number_4(_) ->
+    <<"16502530000">> = ephone:clean_phone_number(<<"+1 (650) 253-0000 x101">>).
+
+t_clean_phone_number_5(_) ->
+    <<"16502530000">> = ephone:clean_phone_number(<<"+1 (650) 253-0000 ext. 101">>).
+
+t_clean_phone_number_6(_) ->
+    <<>> = ephone:clean_phone_number(<<"ABCDEFGH">>).
+
+t_normalize_did_invalid(_) ->
+    {error, {invalid_did, <<"ABCDE">>}} = ephone:normalize_did(<<"ABCDE">>, [{country_code, <<"1">>}]).
 
 
 t_normalize_did_us_domestic(_) ->
-    <<"+16502530000">> = ephone:normalize_did(<<"6502530000">>, [{country_code, <<"1">>}]).
+    {ok, <<"+16502530000">>} = ephone:normalize_did(<<"6502530000">>, [{country_code, <<"1">>}]).
 
 t_normalize_did_us_domestic_formatted(_) ->
-    <<"+16502530000">> = ephone:normalize_did(<<"(650) 253-0000">>, [{country_code, <<"1">>}]).
+    {ok, <<"+16502530000">>} = ephone:normalize_did(<<"(650) 253-0000">>, [{country_code, <<"1">>}]).
 
 t_parse_did_us_domestic(_) ->
-    ParsedDid = ephone:parse_did(<<"6502530000">>, [{country_code, <<"1">>}]),
-    {country_code, <<"1">>} = lists:keyfind(country_code, 1, ParsedDid),
-    {phone_number, <<"6502530000">>} = lists:keyfind(phone_number, 1, ParsedDid).
+    check_parse_did(<<"6502530000">>, <<"1">>, <<"6502530000">>).
 
 t_parse_did_us_domestic_formatted(_) ->
-    ParsedDid = ephone:parse_did(<<"(650) 253-0000">>, [{country_code, <<"1">>}]),
-    {country_code, <<"1">>} = lists:keyfind(country_code, 1, ParsedDid),
-    {phone_number, <<"6502530000">>} = lists:keyfind(phone_number, 1, ParsedDid).
+    check_parse_did(<<"(650) 253-0000">>, <<"1">>, <<"6502530000">>).
 
 t_parse_did_us_international_formatted(_) ->
-    ParsedDid = ephone:parse_did(<<"+1 (650) 253-0000">>, []),
-    {country_code, <<"1">>} = lists:keyfind(country_code, 1, ParsedDid),
-    {phone_number, <<"6502530000">>} = lists:keyfind(phone_number, 1, ParsedDid).
+    check_parse_did(<<"+1 (650) 253-0000">>, <<"1">>, <<"6502530000">>).
 
 t_parse_did_us_canonical(_) ->
-    ParsedDid = ephone:parse_did(<<"+16502530000">>, []),
-    {country_code, <<"1">>} = lists:keyfind(country_code, 1, ParsedDid),
-    {phone_number, <<"6502530000">>} = lists:keyfind(phone_number, 1, ParsedDid).
+    check_parse_did(<<"+16502530000">>, <<"1">>, <<"6502530000">>).
 
 
 t_parse_destination_us_local(_) ->
@@ -176,28 +199,28 @@ t_parse_destination_us_international_operator(_) ->
     {phone_number, <<"00">>} = lists:keyfind(phone_number, 1, ParsedDestination).
 
 t_parse_did_us_domestic_with_extension_1(_) ->
-    check_did_with_extension(<<"(234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+    check_parse_did_with_extension(<<"(234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
 
 t_parse_did_us_domestic_with_extension_2(_) ->
-    check_did_with_extension(<<"+1 (234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+    check_parse_did_with_extension(<<"+1 (234)567-8901 x123">>, <<"1">>, <<"2345678901">>, <<"123">>).
 
 t_parse_did_us_domestic_with_extension_3(_) ->
-    check_did_with_extension(<<"12 3456 789 01 x1234">>, <<"1">>, <<"2345678901">>, <<"1234">>).
+    check_parse_did_with_extension(<<"12 3456 789 01 x1234">>, <<"1">>, <<"2345678901">>, <<"1234">>).
 
 t_parse_did_us_domestic_with_extension_4(_) ->
-    check_did_with_extension(<<"(234)567-8901x12">>, <<"1">>, <<"2345678901">>, <<"12">>).
+    check_parse_did_with_extension(<<"(234)567-8901x12">>, <<"1">>, <<"2345678901">>, <<"12">>).
 
 t_parse_did_us_domestic_with_extension_5(_) ->
-    check_did_with_extension(<<"(234)567-8901ext12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
+    check_parse_did_with_extension(<<"(234)567-8901ext12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
 
 t_parse_did_us_domestic_with_extension_6(_) ->
-    check_did_with_extension(<<"(234)567-8901 extension12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
+    check_parse_did_with_extension(<<"(234)567-8901 extension12345">>, <<"1">>, <<"2345678901">>, <<"12345">>).
 
 t_parse_did_us_domestic_with_extension_7(_) ->
-    check_did_with_extension(<<"234.567.8901 #12">>, <<"1">>, <<"2345678901">>, <<"12">>).
+    check_parse_did_with_extension(<<"234.567.8901 #12">>, <<"1">>, <<"2345678901">>, <<"12">>).
 
 t_parse_did_us_domestic_with_extension_8(_) ->
-    check_did_with_extension(<<"1-234-567-8901 ext. 123">>, <<"1">>, <<"2345678901">>, <<"123">>).
+    check_parse_did_with_extension(<<"1-234-567-8901 ext. 123">>, <<"1">>, <<"2345678901">>, <<"123">>).
 
 
 %
@@ -218,9 +241,13 @@ start_server(Config) ->
 setup_environment(_Config) ->
     application:set_env(ephone, default_iso_code, <<"us">>).
 
+check_parse_did(Did, CountryCode, PhoneNumber) ->
+    {ok, ParsedDid} = ephone:parse_did(Did, [{country_code, CountryCode}]),
+    {country_code, CountryCode} = lists:keyfind(country_code, 1, ParsedDid),
+    {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDid).
 
-check_did_with_extension(Did, CountryCode, PhoneNumber, Extension) ->
-    ParsedDid = ephone:parse_did(Did, [{country_code, CountryCode}]),
+check_parse_did_with_extension(Did, CountryCode, PhoneNumber, Extension) ->
+    {ok, ParsedDid} = ephone:parse_did(Did, [{country_code, CountryCode}]),
     {country_code, CountryCode} = lists:keyfind(country_code, 1, ParsedDid),
     {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDid),
     {extension, Extension} = lists:keyfind(extension, 1, ParsedDid).
