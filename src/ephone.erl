@@ -98,11 +98,11 @@ country_codes(IsoCode) ->
 iso_code(CountryCode) ->
     gen_server:call(?SERVER, {iso_code, CountryCode}).
 
--spec normalize_did(phone_number(), [parse_option()]) -> phone_number().
+-spec normalize_did(phone_number(), [parse_option()]) -> {ok, phone_number()} | {error, Reason :: term()}.
 normalize_did(PhoneNumber, Options) ->
     gen_server:call(?SERVER, {normalize_did, PhoneNumber, Options}).
 
--spec parse_did(phone_number(), [parse_option()]) -> proplists:proplist().
+-spec parse_did(phone_number(), [parse_option()]) -> {ok, proplists:proplist()} | {error, Reason :: term()}.
 parse_did(PhoneNumber, Options) ->
     gen_server:call(?SERVER, {parse_did, PhoneNumber, Options}).
 
@@ -118,9 +118,17 @@ parse_destination(PhoneNumber, Options) ->
 format(Format, PhoneNumber, Options) when is_binary(Format) ->
     gen_server:call(?SERVER, {format, Format, PhoneNumber, Options}).
 
--spec clean_phone_number(phone_number()) -> phone_number().
+-spec clean_phone_number(binary()) -> phone_number().
 clean_phone_number(PhoneNumber) ->
-    << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>.
+    clean_phone_number(PhoneNumber, <<>>).
+
+clean_phone_number(<<Digit, Tail/binary>>, Acc) when Digit >= $0, Digit =< $9 ->
+    clean_phone_number(Tail, <<Acc/binary, Digit>>);
+clean_phone_number(<<Char, Tail/binary>>, Acc) when Char =:= $+; Char =:= $-; Char =:= $.;
+                                                    Char =:= $(; Char =:= $); Char =:= $/; Char =:= $\s ->
+    clean_phone_number(Tail, Acc);
+clean_phone_number(_Tail, Acc) ->
+    Acc.
 
 -spec is_phone_number(binary()) -> boolean().
 is_phone_number(PhoneNumber) ->
@@ -368,33 +376,42 @@ decode_json_countries([], Acc) ->
     Acc.
 
 
--spec normalize_did_internal(phone_number(), [parse_option()], #state{}) -> phone_number().
-normalize_did_internal(<<$+, PhoneNumber/binary>>, _Options, _State) ->
-    CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>,
-    <<$+, CleanNumber/binary>>;
+-spec normalize_did_internal(phone_number(), [parse_option()], #state{}) -> {ok, phone_number()} | {error, Reason :: term()}.
+normalize_did_internal(<<$+, PhoneNumber/binary>> = FullPhoneNumber, _Options, _State) ->
+    case clean_phone_number(PhoneNumber) of
+        <<>> ->
+            {error, {invalid_did, FullPhoneNumber}};
+        CleanNumber ->
+            {ok, <<$+, CleanNumber/binary>>}
+    end;
 normalize_did_internal(PhoneNumber, Options, State) ->
     CountryCode = proplists:get_value(country_code, Options, State#state.default_country_code),
-    CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>,
     CountryCodeLen = byte_size(CountryCode),
-    case CleanNumber of
-        <<CountryCode:CountryCodeLen/binary, _DomesticNumber/binary>> ->
-            <<$+, CleanNumber/binary>>;
-        _ ->
-            <<$+, CountryCode/binary, CleanNumber/binary>>
+    case clean_phone_number(PhoneNumber) of
+        <<>> ->
+            {error, {invalid_did, PhoneNumber}};
+        <<CountryCode:CountryCodeLen/binary, _DomesticNumber/binary>> = CleanNumber ->
+            {ok, <<$+, CleanNumber/binary>>};
+        CleanNumber ->
+            {ok, <<$+, CountryCode/binary, CleanNumber/binary>>}
     end.
 
 
 
--spec parse_did_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
+-spec parse_did_internal(phone_number(), [parse_option()], #state{}) -> {ok, proplists:proplist()} | {error, Reason :: term()}.
 parse_did_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
-    NormalizedNumber = normalize_did_internal(PhoneNumber, Options, State),
-    {CountryCode, DomesticNumber} = split_country_code_internal(NormalizedNumber, State),
-    Tail = case Extension of
-               undefined -> [];
-               _         -> [{extension, Extension}]
-           end,
-    [{country_code, CountryCode}, {phone_number, DomesticNumber} | Tail].
+    case normalize_did_internal(PhoneNumber, Options, State) of
+        {ok, NormalizedNumber} ->
+            {CountryCode, DomesticNumber} = split_country_code_internal(NormalizedNumber, State),
+            Tail = case Extension of
+                       undefined -> [];
+                       _         -> [{extension, Extension}]
+                   end,
+            {ok, [{country_code, CountryCode}, {phone_number, DomesticNumber} | Tail]};
+        Error ->
+            Error
+    end.
 
 
 %% @doc Remove non-digit characters from a dialed (destination) phone number.
