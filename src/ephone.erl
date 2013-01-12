@@ -5,7 +5,7 @@
 %%% @copyright (C) 2012 Juan Jose Comellas, Mahesh Paolini-Subramanya,
 %%%                     Paul Oliver
 %%% @doc
-%%% Phone parsing and validation.
+%%% Phone number parsing and validation.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(ephone).
@@ -14,6 +14,8 @@
 -behaviour(gen_server).
 
 %% API
+-export([start/0, stop/0]).
+-export([get_env/0, get_env/1, get_env/2, set_env/2]).
 -export([start_link/0, start_link/1]).
 -export([country/1, country_codes/1, iso_code/1]).
 -export([normalize_did/2, parse_did/2]).
@@ -37,7 +39,7 @@
 -define(APP, ephone).
 -define(BASENAME, "country_codes.json").
 -define(DEFAULT_COUNTRY, "us").
--define(PHONE_NUMBER_REGEX, "^([\\+]{0,1}[0-9\\-\\(\\)\\.\\s/]+)(\\s*(x|xt|ex|ext|ext\\.|extension|#|:)\\s*([0-9]+)){0,1}$").
+-define(PHONE_NUMBER_REGEX, "^([\\+]{0,1}[0-9\\-\\_\\(\\)\\.\\,\\s/]+)(\\s*(x|xt|ex|ext|ext|extension|#|:)[\\.]{0,1}\\s*([0-9]+)){0,1}$").
 
 -type iso_code()                                                    :: binary().
 -type country_code()                                                :: binary().
@@ -57,10 +59,13 @@
 -record(country, {
           iso_code = erlang:error({required, iso_code})             :: iso_code(),
           country_codes = erlang:error({required, country_code})    :: country_code() | [country_code()],
+          country_short_code                                        :: [country_code()],
           country_name                                              :: binary(),
           trunk_prefix                                              :: trunk_prefix(),
           international_prefix                                      :: international_prefix()
          }).
+
+-type country()                                                     :: #country{}.
 
 -record(state, {
           default_iso_code                                          :: iso_code(),
@@ -88,11 +93,11 @@ start_link(Options) ->
 
 -spec country(iso_code() | country_code()) -> proplists:proplist() | undefined.
 country(Code) ->
-    gen_server:call(?SERVER, {country, Code}).
+    gen_server:call(?SERVER, {country, bstr:lower(Code)}).
 
 -spec country_codes(iso_code()) -> [country_code()].
 country_codes(IsoCode) ->
-    gen_server:call(?SERVER, {country_codes, IsoCode}).
+    gen_server:call(?SERVER, {country_codes, bstr:lower(IsoCode)}).
 
 -spec iso_code(country_code()) -> iso_code().
 iso_code(CountryCode) ->
@@ -169,6 +174,75 @@ ensure_dial_rules_started(IsoCode, CountryCode) ->
             Result
     end.
 
+%% @doc Start the application and all its dependencies.
+-spec start() -> ok.
+start() ->
+    start_deps(?APP).
+
+%% @doc Stop the application and all its dependencies.
+-spec stop() -> ok.
+stop() ->
+    stop_deps(?APP).
+
+%% @doc Retrieve all key/value pairs in the env for the specified app.
+-spec get_env() -> [{Key :: atom(), Value :: term()}].
+get_env() ->
+    application:get_all_env(?APP).
+
+%% @doc The official way to get a value from the app's env.
+%%      Will return the 'undefined' atom if that key is unset.
+-spec get_env(Key :: atom()) -> term().
+get_env(Key) ->
+    get_env(Key, undefined).
+
+%% @doc The official way to get a value from this application's env.
+%%      Will return Default if that key is unset.
+-spec get_env(Key :: atom(), Default :: term()) -> term().
+get_env(Key, Default) ->
+    case application:get_env(?APP, Key) of
+        {ok, Value} ->
+            Value;
+        _ ->
+            Default
+    end.
+
+%% @doc Sets the value of the configuration parameter Key for this application.
+-spec set_env(Key :: atom(), Value :: term()) -> ok.
+set_env(Key, Value) ->
+    application:set_env(?APP, Key, Value).
+
+-spec start_deps(App :: atom()) -> ok.
+start_deps(App) ->
+    application:load(App),
+    {ok, Deps} = application:get_key(App, applications),
+    lists:foreach(fun start_deps/1, Deps),
+    start_app(App).
+
+-spec start_app(App :: atom()) -> ok.
+start_app(App) ->
+    case application:start(App) of
+        {error, {already_started, _}} -> ok;
+        ok                            -> ok
+    end.
+
+-spec stop_deps(App :: atom()) -> ok.
+stop_deps(App) ->
+    stop_app(App),
+    {ok, Deps} = application:get_key(App, applications),
+    lists:foreach(fun stop_deps/1, lists:reverse(Deps)).
+
+-spec stop_app(App :: atom()) -> ok.
+stop_app(kernel) ->
+    ok;
+stop_app(stdlib) ->
+    ok;
+stop_app(App) ->
+    case application:stop(App) of
+        {error, {not_started, _}} -> ok;
+        ok                        -> ok
+    end.
+
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -222,6 +296,7 @@ handle_call({country, Code}, _From, State) ->
                 {ok, Country} ->
                     [{iso_code, Country#country.iso_code},
                      {country_codes, Country#country.country_codes},
+                     {country_short_code, Country#country.country_short_code},
                      {country_name, Country#country.country_name},
                      {trunk_prefix, Country#country.trunk_prefix},
                      {international_prefix, Country#country.international_prefix}];
@@ -353,9 +428,15 @@ decode_json_countries([JsonTerm | Tail], {IsoCodeDict, CountryCodeTrie}) ->
                        CountryCode when is_binary(CountryCode) -> [CountryCode];
                        List when is_list(List)                 -> List
                    end,
+    CountryShortCode = case kvc:path(<<"country_short_code">>, JsonTerm) of
+                       Code when is_binary(Code) -> [Code];
+                       _ -> []
+
+                   end,
     Country = #country{
                  country_codes = CountryCodes,
                  iso_code = IsoCode,
+                 country_short_code = CountryShortCode,
                  country_name = kvc:path(<<"country_name">>, JsonTerm),
                  trunk_prefix = kvc:path(<<"trunk_prefix">>, JsonTerm),
                  international_prefix = kvc:path(<<"international_prefix">>, JsonTerm)
@@ -370,11 +451,11 @@ decode_json_countries([], Acc) ->
 
 -spec normalize_did_internal(phone_number(), [parse_option()], #state{}) -> phone_number().
 normalize_did_internal(<<$+, PhoneNumber/binary>>, _Options, _State) ->
-    CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>,
+    CleanNumber = clean_phone_number_with_x(PhoneNumber),
     <<$+, CleanNumber/binary>>;
 normalize_did_internal(PhoneNumber, Options, State) ->
     CountryCode = proplists:get_value(country_code, Options, State#state.default_country_code),
-    CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>,
+    CleanNumber = clean_phone_number_with_x(PhoneNumber),
     CountryCodeLen = byte_size(CountryCode),
     case CleanNumber of
         <<CountryCode:CountryCodeLen/binary, _DomesticNumber/binary>> ->
@@ -383,7 +464,9 @@ normalize_did_internal(PhoneNumber, Options, State) ->
             <<$+, CountryCode/binary, CleanNumber/binary>>
     end.
 
-
+-spec clean_phone_number_with_x(phone_number()) -> phone_number().
+clean_phone_number_with_x(PhoneNumber) ->
+    << <<Digit>> || <<Digit>> <= PhoneNumber, (Digit >= $0 andalso Digit =< $9) orelse Digit =:= $x >>.
 
 -spec parse_did_internal(phone_number(), [parse_option()], #state{}) -> proplists:proplist().
 parse_did_internal(FullPhoneNumber, Options, State) ->
@@ -400,7 +483,7 @@ parse_did_internal(FullPhoneNumber, Options, State) ->
 %% @doc Remove non-digit characters from a dialed (destination) phone number.
 -spec normalize_destination_internal(phone_number(), [parse_option()]) -> phone_number().
 normalize_destination_internal(PhoneNumber, _Options) when is_binary(PhoneNumber) ->
-    << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>.
+    clean_phone_number(PhoneNumber).
 
 
 -spec parse_destination_internal(phone_number(), [parse_option()], #state{}) ->
@@ -503,10 +586,10 @@ is_phone_number_internal(PhoneNumber, #state{phone_number_regex = PhoneNumberReg
 split_country_code_internal(<<$+, PhoneNumber/binary>>, State) ->
     split_country_code_internal(PhoneNumber, State);
 split_country_code_internal(PhoneNumber, State) ->
-    CleanNumber = << <<Digit>> || <<Digit>> <= PhoneNumber, Digit >= $0, Digit =< $9 >>,
+    CleanNumber = clean_phone_number(PhoneNumber),
     case trie:find_prefix_longest(binary_to_list(CleanNumber), State#state.country_codes) of
-        {ok, CountryCodeStr, _Country} ->
-            CountryCode = list_to_binary(CountryCodeStr),
+        {ok, CountryCodeStr, Country} ->
+            CountryCode = country_code(list_to_binary(CountryCodeStr), Country),
             CountryCodeLen = byte_size(CountryCode),
             <<CountryCode:CountryCodeLen/binary, DomesticNumber/binary>> = CleanNumber,
             {CountryCode, DomesticNumber};
@@ -514,6 +597,15 @@ split_country_code_internal(PhoneNumber, State) ->
             {undefined, PhoneNumber}
     end.
 
+-spec country_code(country_code(), country()) -> country_code().
+country_code(Code, #country{country_short_code = []}) ->
+    Code;
+country_code(Code, #country{country_short_code = [ShortCode]}) ->
+    S = byte_size(ShortCode),
+    case Code of
+        <<ShortCode:S/binary, _/binary>> -> ShortCode;
+        _ -> Code
+    end.
 
 -spec split_extension_internal(phone_number(), #state{}) -> {phone_number(), extension() | undefined}.
 split_extension_internal(FullPhoneNumber, State) ->
