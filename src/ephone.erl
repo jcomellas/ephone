@@ -492,7 +492,7 @@ parse_destination_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
     NormalizedNumber = normalize_destination_internal(PhoneNumber, Options),
     IsoCode = proplists:get_value(iso_code, Options, State#state.default_iso_code),
-    case dict:find(IsoCode, State#state.iso_codes) of
+    case dict:find(bstr:lower(IsoCode), State#state.iso_codes) of
         {ok, Country} ->
             case ephone:ensure_dial_rules_started(IsoCode, Country#country.iso_code) of
                 {ok, DialRulesRef} ->
