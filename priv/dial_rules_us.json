@@ -32,7 +32,7 @@
         },
         {
             "billing_tags": ["premium"],
-            "regexp": "^1900[2-9][0-9]{6}$",
+            "regexp": "^[1]{0,1}900[2-9][0-9]{6}$",
             "display_name": "Premium numbers"
         },
         {
