@@ -20,5 +20,6 @@
 start(_StartType, _StartArgs) ->
     ephone_sup:start_link().
 
+-spec stop(any()) -> ok.
 stop(_State) ->
     ok.
