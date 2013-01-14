@@ -56,6 +56,9 @@ end_per_testcase(_TestCase, _Config) ->
 
 groups() ->
     [
+        {common, [parallel],
+         [t_clean_did,
+          t_normalize_did_invalid]},
         {us, [parallel],
          [t_parse_destination_nanp_tf,
           t_parse_destination_nanp_premium,
@@ -74,9 +77,12 @@ groups() ->
     ].
 
 all() ->
-    [{group, us}].
-%    [t_parse_destination_nanp_domestic_premium].
+    [{group, us},
+    {group, common}].
+%    [t_parse_did_nanp].
 
+t_normalize_did_invalid(_) ->
+    {error, {invalid_did, <<"ABCDE">>}} = ephone:normalize_did(<<"ABCDE">>, [{country_code, <<"1">>}]).
 
 t_parse_destination_us_emergency(_) ->
     {ok, ParsedDestination} = ephone:parse_destination(<<"911">>, [{iso_code, <<"us">>}]),
@@ -103,11 +109,18 @@ t_parse_destination_us_international_operator(_) ->
     has_tag(ParsedDestination, [international, operator]),
     {phone_number, <<"00">>} = lists:keyfind(phone_number, 1, ParsedDestination).
 
+t_clean_did(_) ->
+    ?PROPTEST(prop_clean_did).
+
+prop_clean_did() ->
+    numtests(1000, ?FORALL({Number, _CountryCode, Prefix, Digits, _Extension}, did(clean),
+                           clean_did(Number, Prefix , Digits))).
+
 t_parse_did_nanp(_) ->
     ?PROPTEST(prop_parse_did_nanp).
 
 prop_parse_did_nanp() ->
-    numtests(1000, ?FORALL({Number, CountryCode, Digits, Extension}, did(nanp),
+    numtests(1000, ?FORALL({Number, CountryCode, _Prefix, Digits, Extension}, did(nanp),
                            check_did(Number, CountryCode , Digits, Extension))).
 
 t_parse_destination_nanp_tf(_) ->
@@ -185,10 +198,9 @@ setup_environment(_Config) ->
     random:seed(erlang:now()),
     application:set_env(ephone, default_iso_code, <<"us">>).
 
-
 check_did(Did, CountryCode, PhoneNumber, Extension) ->
     try
-        ParsedDid = ephone:parse_did(Did, [{country_code, CountryCode}]),
+        {ok, ParsedDid} = ephone:parse_did(Did, [{country_code, CountryCode}]),
         {country_code, CountryCode} = lists:keyfind(country_code, 1, ParsedDid),
         {phone_number, PhoneNumber} = lists:keyfind(phone_number, 1, ParsedDid),
         {extension, Extension} = lists:keyfind(extension, 1, ParsedDid),
@@ -196,8 +208,7 @@ check_did(Did, CountryCode, PhoneNumber, Extension) ->
         % Normalize the DID and check it
         CLen = byte_size(CountryCode),
         PLen = byte_size(PhoneNumber),
-        <<"+", CountryCode:CLen/binary, PhoneNumber:PLen/binary, 
-          "x", Extension/binary>> = ephone:normalize_did(Did, [{country_code, CountryCode}]),
+        {ok, <<"+", CountryCode:CLen/binary, PhoneNumber:PLen/binary>>} = ephone:normalize_did(Did, [{country_code, CountryCode}]),
         true
     catch
         _:_ ->
@@ -225,9 +236,9 @@ has_tag(ParsedDid, Tags) ->
 is_validated_did(PreParsedDid, Did, IsoCode) ->
     % check the returned did using parse_did too
     [CountryCode] = ephone:country_codes(IsoCode),
-    ParsedDid1 = ephone:parse_did(Did, [{country_code, CountryCode}]),
+    {ok, ParsedDid1} = ephone:parse_did(Did, [{country_code, CountryCode}]),
     {phone_number, PDid1} = lists:keyfind(phone_number, 1, ParsedDid1),
-    ParsedDid2 = ephone:parse_did(PreParsedDid, [{country_code, CountryCode}]),
+    {ok, ParsedDid2} = ephone:parse_did(PreParsedDid, [{country_code, CountryCode}]),
     {phone_number, PDid1} = lists:keyfind(phone_number, 1, ParsedDid2),
     true.
 
@@ -250,6 +261,7 @@ nanp_list(Type) ->
 prefix_list(nanp_domestic_collect) -> "0";
 prefix_list(international) -> "011";
 prefix_list(international_premium) -> "011";
+prefix_list(clean) -> oneof(["011", "1"]);
 prefix_list(_) -> oneof(["+1", "1", ""]).
 
 npa_list(Type) -> 
@@ -270,11 +282,15 @@ npa_list_integer(nanp_domestic_non_tf) ->
                                           orelse lists:member(Npa, ?CARIBBEAN)
                                           orelse lists:member(Npa, ?SERVICES)
                                           orelse Npa =:= 900));
+npa_list_integer(clean) -> oneof([npa_list_integer(nanp),
+                                  npa_list_integer(international)]);
 npa_list_integer(nanp) -> oneof([npa_list_integer(nanp_tf),
                                 npa_list_integer(nanp_premium),
                                 npa_list_integer(nanp_international),
                                 npa_list_integer(nanp_domestic_non_tf)]).
 
+nxx_list(clean) -> oneof([nxx_list(international),
+                          nxx_list(undefined)]);
 nxx_list(international) -> 
     oneof([?LET(X, integer(0,999999999), integer_to_list(X)),
            ?LET(X, integer(0,99999999), "0" ++ integer_to_list(X)),
@@ -318,7 +334,12 @@ random_did(Prefix, Npa, Nxx, Xxxx, Delimiter, Extension) ->
     Number = sanitize(Npa ++ Nxx ++ Xxxx),
     CountryCode = "1",
     FullNumber = sanitize(Prefix ++ random_chars(Number) ++  Delimiter ++ Extension),
-    {list_to_binary(FullNumber), list_to_binary(CountryCode), list_to_binary(Number), list_to_binary(Extension)}.
+    {list_to_binary(FullNumber), list_to_binary(CountryCode), list_to_binary(Prefix), list_to_binary(Number), list_to_binary(Extension)}.
+
+clean_did(Number, Prefix, Digits) ->
+    PLen = byte_size(Prefix),
+    <<Prefix:PLen/binary, Digits/binary>> =:= ephone:clean_phone_number(Number).
+
 
 %% Utility functions used to randomize strings
 

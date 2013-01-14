@@ -61,7 +61,7 @@
             "display_name": "Operator"
         },
         {
-            "billing_tags": ["operator", "international"]
+            "billing_tags": ["operator", "international"],
             "regexp": "^00$",
             "display_name": "International operator"
         }
