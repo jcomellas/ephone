@@ -93,11 +93,11 @@ start_link(Options) ->
 
 -spec country(iso_code() | country_code()) -> proplists:proplist() | undefined.
 country(Code) ->
-    gen_server:call(?SERVER, {country, bstr:lower(Code)}).
+    gen_server:call(?SERVER, {country, to_lower(Code)}).
 
 -spec country_codes(iso_code()) -> [country_code()].
 country_codes(IsoCode) ->
-    gen_server:call(?SERVER, {country_codes, bstr:lower(IsoCode)}).
+    gen_server:call(?SERVER, {country_codes, to_lower(IsoCode)}).
 
 -spec iso_code(country_code()) -> iso_code().
 iso_code(CountryCode) ->
@@ -506,7 +506,7 @@ parse_destination_internal(FullPhoneNumber, Options, State) ->
     {PhoneNumber, Extension} = split_extension_internal(FullPhoneNumber, State),
     NormalizedNumber = normalize_destination_internal(PhoneNumber, Options),
     IsoCode = proplists:get_value(iso_code, Options, State#state.default_iso_code),
-    case dict:find(bstr:lower(IsoCode), State#state.iso_codes) of
+    case dict:find(to_lower(IsoCode), State#state.iso_codes) of
         {ok, Country} ->
             case ephone:ensure_dial_rules_started(IsoCode, Country#country.iso_code) of
                 {ok, DialRulesRef} ->
@@ -644,3 +644,16 @@ country_codes_dir() ->
         _Error ->
             "priv"
     end.
+
+%% @doc Convert all the characters in a binary to lowercase.
+-spec to_lower(binary()) -> binary().
+to_lower(Str) ->
+    to_lower(Str, <<>>).
+
+to_lower(<<Char, Tail/binary>>, Acc) when Char >= $A, Char =< $Z ->
+    Lower = Char - $A + $a,
+    to_lower(Tail, <<Acc/binary, Lower>>);
+to_lower(<<Char, Tail/binary>>, Acc) ->
+    to_lower(Tail, <<Acc/binary, Char>>);
+to_lower(<<>>, Acc) ->
+    Acc.
