@@ -6,6 +6,7 @@
   },
   {
     "country_name": "Canada",
+    "country_short_code": "1",
     "country_codes": ["1403", "1587", "1780",
                       "1236", "1250", "1604", "1778",
                       "1204", "1431",
@@ -20,116 +21,139 @@
   },
   {
     "country_name": "Bahamas",
+    "country_short_code": "1",
     "country_codes": "1242",
     "iso_code": "bs"
   },
   {
     "country_name": "Barbados",
+    "country_short_code": "1",
     "country_codes": "1246",
     "iso_code": "bb"
   },
   {
     "country_name": "Anguilla",
+    "country_short_code": "1",
     "country_codes": "1264",
     "iso_code": "ai"
   },
   {
     "country_name": "Antigua and Barbuda",
+    "country_short_code": "1",
     "country_codes": "1268",
     "iso_code": "ag"
   },
   {
     "country_name": "British Virgin Islands",
+    "country_short_code": "1",
     "country_codes": "1284",
     "iso_code": "vg"
   },
   {
     "country_name": "US Virgin Islands",
+    "country_short_code": "1",
     "country_codes": "1340",
     "iso_code": "vi"
   },
   {
     "country_name": "Cayman Islands",
+    "country_short_code": "1",
     "country_codes": "1345",
     "iso_code": "ky"
   },
   {
     "country_name": "Bermuda",
+    "country_short_code": "1",
     "country_codes": "1441",
     "iso_code": "bm"
   },
   {
     "country_name": "Grenada",
+    "country_short_code": "1",
     "country_codes": "1473",
     "iso_code": "gd"
   },
   {
     "country_name": "Turks and Caicos Islands",
+    "country_short_code": "1",
     "country_codes": "1649",
     "iso_code": "tc"
   },
   {
     "country_name": "Montserrat",
+    "country_short_code": "1",
     "country_codes": "1664",
     "iso_code": "ms"
   },
   {
     "country_name": "Northern Mariana Islands",
+    "country_short_code": "1",
     "country_codes": "1670",
     "iso_code": "mp"
   },
   {
     "country_name": "Guam",
+    "country_short_code": "1",
     "country_codes": "1671",
     "iso_code": "gu"
   },
   {
     "country_name": "American Samoa",
+    "country_short_code": "1",
     "country_codes": "1684",
     "iso_code": "as"
   },
   {
     "country_name": "Saint Lucia",
+    "country_short_code": "1",
     "country_codes": "1758",
     "iso_code": "lc"
   },
   {
     "country_name": "Dominica",
+    "country_short_code": "1",
     "country_codes": "1767",
     "iso_code": "dm"
   },
   {
     "country_name": "Saint Vincent and the Grenadines",
+    "country_short_code": "1",
     "country_codes": "1784",
     "iso_code": "vc"
   },
   {
     "country_name": "Puerto Rico",
+    "country_short_code": "1",
     "country_codes": ["1787", "1939"],
     "iso_code": "pr"
   },
   {
+    "country_short_code": "1",
     "country_name": "Dominican Republic ",
     "country_codes": ["1809", "1829", "1849"],
     "iso_code": "do"
   },
   {
     "country_name": "Trinidad and Tobago",
+    "country_short_code": "1",
     "country_codes": "1868",
     "iso_code": "tt"
   },
   {
     "country_name": "Saint Kitts and Nevis",
+    "country_short_code": "1",
     "country_codes": "1869",
     "iso_code": "kn"
   },
   {
     "country_name": "Sint Marteen",
+    "country_short_code": "1",
     "country_codes": "1721",
     "iso_code": "sx"
   },
   {
     "country_name": "Jamaica",
+    "country_short_code": "1",
     "country_codes": "1876",
     "iso_code": "jm"
   },
