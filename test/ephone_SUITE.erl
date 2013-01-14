@@ -61,6 +61,7 @@ groups() ->
           t_parse_destination_nanp_premium,
           t_parse_destination_nanp_international,
           t_parse_destination_nanp_domestic_non_tf,
+          t_parse_destination_nanp_domestic_premium,
           t_parse_destination_nanp_domestic_collect,
           t_parse_destination_international,
           t_parse_destination_international_premium,
@@ -74,7 +75,7 @@ groups() ->
 
 all() ->
     [{group, us}].
-%    [t_parse_did_nanp].
+%    [t_parse_destination_nanp_domestic_premium].
 
 
 t_parse_destination_us_emergency(_) ->
@@ -136,6 +137,13 @@ t_parse_destination_nanp_domestic_non_tf(_) ->
 prop_parse_destination_nanp_domestic_non_tf() ->
     numtests(1000, ?FORALL({Number, CountryCode}, destination(nanp_domestic_non_tf),
                            check_destination(Number, CountryCode, [domestic]))).
+
+t_parse_destination_nanp_domestic_premium(_) ->
+    ?PROPTEST(prop_parse_destination_nanp_domestic_premium).
+
+prop_parse_destination_nanp_domestic_premium() ->
+    numtests(1000, ?FORALL({Number, CountryCode}, destination(nanp_domestic_premium),
+                           check_destination(Number, CountryCode, [domestic, premium]))).
 
 t_parse_destination_nanp_domestic_collect(_) ->
     ?PROPTEST(prop_parse_destination_nanp_domestic_collect).
@@ -255,6 +263,7 @@ npa_list_integer(international) -> integer(2,9);
 % Lichtenstein
 npa_list_integer(international_premium) -> 423;
 npa_list_integer(nanp_domestic_collect) -> npa_list_integer(nanp_domestic_non_tf);
+npa_list_integer(nanp_domestic_premium) -> oneof(?IOWA);
 npa_list_integer(nanp_domestic_non_tf) -> 
     ?SUCHTHAT(Npa, integer(200, 999), not(lists:member(Npa, ?CANADA)
                                           orelse lists:member(Npa, ?TF)
@@ -276,8 +285,9 @@ nxx_list(international) ->
            ?LET(X, integer(0,999), "000000" ++ integer_to_list(X)),
            ?LET(X, integer(0,99), "0000000" ++ integer_to_list(X)),
            ?LET(X, integer(0,9), "00000000" ++ integer_to_list(X))]);
-nxx_list(_) -> 
-    ?LET(X, integer(200,999), integer_to_list(X)).
+% hack since nxx is covered by npa above
+nxx_list(nanp_domestic_premium) -> "";
+nxx_list(_) -> ?LET(X, integer(200,999), integer_to_list(X)).
 
 xxxx_list(_) -> 
     [integer($0, $9), integer($0, $9), integer($0, $9), integer($0, $9)].
