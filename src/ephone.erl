@@ -39,7 +39,7 @@
 -define(APP, ephone).
 -define(BASENAME, "country_codes.json").
 -define(DEFAULT_COUNTRY, "us").
--define(PHONE_NUMBER_REGEX, "^([\\+]{0,1}[0-9\\-\\_\\(\\)\\.\\,\\s/]+)(\\s*(x|xt|ex|ext|ext|extension|#|:)[\\.]{0,1}\\s*([0-9]+)){0,1}$").
+-define(PHONE_NUMBER_REGEX, "^([\\+]{0,1}[0-9\\-_\\(\\)\\.\\,/\\s]+)(\\s*(x|xt|ex|ext|ext|extension|#|:)[\\.]{0,1}\\s*([0-9]+)){0,1}$").
 
 -type iso_code()                                                    :: binary().
 -type country_code()                                                :: binary().
@@ -129,8 +129,8 @@ clean_phone_number(PhoneNumber) ->
 
 clean_phone_number(<<Digit, Tail/binary>>, Acc) when Digit >= $0, Digit =< $9 ->
     clean_phone_number(Tail, <<Acc/binary, Digit>>);
-clean_phone_number(<<Char, Tail/binary>>, Acc) when Char =:= $+; Char =:= $-; Char =:= $.; 
-                                                    Char =:= $_; Char =:= $(; Char =:= $); 
+clean_phone_number(<<Char, Tail/binary>>, Acc) when Char =:= $+; Char =:= $-; Char =:= $.;
+                                                    Char =:= $_; Char =:= $(; Char =:= $);
                                                     Char =:= $/; Char =:= $\s; Char =:= $, ->
     clean_phone_number(Tail, Acc);
 clean_phone_number(_Tail, Acc) ->
