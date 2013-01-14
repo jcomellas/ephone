@@ -1,38 +1,45 @@
-APPLICATION := ephone
+PROJECT_NAME := ephone
 
-REBAR=$(shell which rebar || echo ./rebar)
+REBAR := $(shell which rebar || echo ./rebar)
 ERL := erl
-EPATH := -pa ebin -pz deps/*/ebin
-TEST_EPATH := -pa .eunit -pz deps/*/ebin
+EPATH := -pa ./ebin -pz deps/*/ebin
+TEST_EPATH := -pa ./test -pz deps/*/ebin
+ERL_LIB_DIR := $(shell if [ -d /usr/lib/erlang/lib ] ; then echo /usr/lib/erlang/lib ; else echo /usr/local/lib/erlang/lib ; fi)
 
-DIALYZER=dialyzer
-DIALYZER_OPTS=-Wno_return -Wrace_conditions -Wno_undefined_callbacks --fullpath
-
-.PHONY: all clean compile console deps dialyze doc test test-console
+.PHONY: all clean compile console depclean deps doc dialyze distclean doc fast test test-console
 
 all: compile
 
 clean:
-	@$(REBAR) clean
+	$(REBAR) skip_deps=true clean
 
 compile:
 	@$(REBAR) compile
 
 console:
-	$(ERL) -sname $(APPLICATION) $(EPATH)
+	$(ERL) -sname $(PROJECT_NAME) $(EPATH)
+
+depclean:
+	$(REBAR) clean
 
 deps:
-	@$(REBAR) get-deps && $(REBAR) update-deps
+	$(REBAR) get-deps update-deps
 
 dialyze: compile
-	@$(DIALYZER) $(DIALYZER_OPTS) -r ./
+	@dialyzer --fullpath -Wno_undefined_callbacks src/*.erl
+
+distclean:
+	$(REBAR) clean delete-deps
 
 doc:
-	@$(REBAR) doc
+	$(REBAR) skip_deps=true doc
+
+fast:
+	$(REBAR) skip_deps=true compile
 
 test:
 	@$(REBAR) ct
 
 test-console:
-	$(ERL) -sname $(APPLICATION)_test $(TEST_EPATH)
+	$(ERL) -sname $(PROJECT_NAME)_test $(TEST_EPATH)
 
